@@ -85,6 +85,7 @@ export interface Signalement {
   visages_plaques_floutes: boolean;
   nb_zones_floutees: number;
   statut: StatutSignalement;
+  alerte_liee?: number | null;
   ip_emetteur?: string | null;
   date_creation: string;
   date_mise_a_jour?: string;

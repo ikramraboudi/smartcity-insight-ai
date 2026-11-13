@@ -474,3 +474,161 @@ class SignalementSecurityPermissionsTest(TestCase):
         self.assertEqual(res_tampered.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
+class SignalementProtectionCivileSyncIntegrationTest(TestCase):
+    """
+    Tests d'intégration de la passerelle automatique Citoyen ➔ Protection Civile
+    et de la synchronisation bidirectionnelle des statuts d'intervention.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+
+        # Responsable municipal authentifié pour les changements de statut
+        self.responsable = User.objects.create_user(
+            username='responsable_test_sync',
+            password='TestSyncPass2026!'
+        )
+        self.responsable.profil.role = UserRole.RESPONSABLE_MUNICIPAL
+        self.responsable.profil.save()
+
+    def test_accident_signalement_automatically_creates_alerte_accident(self):
+        """
+        Un signalement citoyen de type ACCIDENT ou de gravité CRITIQUE doit créer
+        automatiquement une AlerteAccident liée et un SignalementAccident.
+        """
+        payload = {
+            'categorie': 'ACCIDENT',
+            'gravite': 'CRITIQUE',
+            'description': 'Collision frontale avenue Habib Bourguiba avec blessés',
+            'latitude': 36.8005,
+            'longitude': 10.1800,
+            'adresse_texte': 'Avenue Habib Bourguiba, Tunis',
+            'quartier': 'Centre-Ville Tunis',
+        }
+        res = self.client.post('/api/signalements/', payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        sig_id = res.json()['id']
+        signalement = Signalement.objects.get(id=sig_id)
+
+        # 1. Vérification de la création et du lien de l'alerte
+        self.assertIsNotNone(signalement.alerte_liee, "Le signalement d'accident doit être lié à une AlerteAccident.")
+        alerte = signalement.alerte_liee
+
+        # 2. Vérification des propriétés de l'alerte Protection Civile
+        self.assertEqual(alerte.gravite, 'GRAVE')
+        self.assertEqual(alerte.statut, 'CONFIRME')
+        self.assertGreaterEqual(alerte.signalements_lies.count(), 1)
+        self.assertAlmostEqual(alerte.latitude, 36.8005, places=3)
+        self.assertAlmostEqual(alerte.longitude, 10.1800, places=3)
+
+        # 3. Vérification de l'inscription au journal d'audit
+        from urgences.models import JournalAudit
+        audits = JournalAudit.objects.filter(alerte=alerte)
+        self.assertTrue(audits.exists(), "Un journal d'audit doit être généré pour la Protection Civile.")
+
+    def test_non_urgent_signalement_does_not_create_alerte(self):
+        """
+        Un signalement de voirie standard (déchets, faible gravité) ne doit PAS
+        encombrer la Protection Civile ni créer d'AlerteAccident.
+        """
+        payload = {
+            'categorie': 'DECHETS',
+            'gravite': 'FAIBLE',
+            'description': 'Poubelle débordante près du parc',
+            'latitude': 36.8150,
+            'longitude': 10.1750,
+            'quartier': 'Lafayette',
+        }
+        res = self.client.post('/api/signalements/', payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        sig_id = res.json()['id']
+        signalement = Signalement.objects.get(id=sig_id)
+        self.assertIsNone(signalement.alerte_liee, "Un signalement standard ne doit pas être lié à une alerte d'urgence.")
+
+    def test_bidirectional_sync_municipal_to_protection_civile(self):
+        """
+        Lorsque le Responsable Municipal met à jour le statut (EN_COURS puis RESOLU),
+        l'alerte Protection Civile liée doit passer à PRISE_EN_CHARGE puis CLOTURE.
+        """
+        self.client.force_authenticate(user=self.responsable)
+
+        # 1. Création d'un signalement d'accident
+        signalement = Signalement.objects.create(
+            categorie=Signalement.Categorie.ACCIDENT,
+            gravite=Signalement.Gravite.ELEVEE,
+            description="Véhicule en panne bloquant les voies",
+            latitude=36.8200,
+            longitude=10.1900,
+            quartier="Montplaisir",
+        )
+        self.assertIsNotNone(signalement.alerte_liee)
+        alerte = signalement.alerte_liee
+
+        # 2. Le Responsable Municipal passe le statut à EN_COURS
+        url_changer = f'/api/signalements/{signalement.id}/changer-statut/'
+        res_cours = self.client.post(url_changer, {'statut': 'EN_COURS'}, format='json')
+        self.assertEqual(res_cours.status_code, status.HTTP_200_OK)
+
+        alerte.refresh_from_db()
+        self.assertEqual(
+            alerte.statut,
+            'PRISE_EN_CHARGE',
+            "Le statut de l'alerte pompier doit être synchronisé vers PRISE_EN_CHARGE."
+        )
+        self.assertIsNotNone(alerte.date_prise_en_charge)
+
+        # 3. Le Responsable Municipal passe le statut à RESOLU
+        res_resolu = self.client.post(url_changer, {'statut': 'RESOLU'}, format='json')
+        self.assertEqual(res_resolu.status_code, status.HTTP_200_OK)
+
+        alerte.refresh_from_db()
+        self.assertEqual(
+            alerte.statut,
+            'CLOTURE',
+            "Le statut de l'alerte pompier doit être synchronisé vers CLOTURE."
+        )
+        self.assertIsNotNone(alerte.date_cloture)
+
+    def test_bidirectional_sync_protection_civile_to_municipal(self):
+        """
+        Lorsque la Protection Civile prend en charge ou clôture une alerte,
+        le Signalement municipal correspondant doit évoluer vers EN_COURS puis RESOLU.
+        """
+        signalement = Signalement.objects.create(
+            categorie=Signalement.Categorie.ACCIDENT,
+            gravite=Signalement.Gravite.CRITIQUE,
+            description="Accident grave Route de la Marsa",
+            latitude=36.8520,
+            longitude=10.2780,
+            quartier="La Goulette",
+        )
+        alerte = signalement.alerte_liee
+        self.assertIsNotNone(alerte)
+
+        # 1. La Protection Civile change le statut de l'alerte vers EN_INTERVENTION
+        alerte.statut = 'EN_INTERVENTION'
+        alerte.save()
+
+        signalement.refresh_from_db()
+        self.assertEqual(
+            signalement.statut,
+            Signalement.Statut.EN_COURS,
+            "Le signalement municipal doit être synchronisé vers EN_COURS."
+        )
+
+        # 2. La Protection Civile clôture l'alerte
+        alerte.statut = 'CLOTURE'
+        alerte.save()
+
+        signalement.refresh_from_db()
+        self.assertEqual(
+            signalement.statut,
+            Signalement.Statut.RESOLU,
+            "Le signalement municipal doit être synchronisé vers RESOLU."
+        )
+
+
+

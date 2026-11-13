@@ -18,7 +18,6 @@ ALLOWED_HOSTS = ['*']
 
 # Application definition
 INSTALLED_APPS = [
-    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -29,8 +28,15 @@ INSTALLED_APPS = [
     'rest_framework',
     'channels',
     'urgences',
-    'signalements',
+    'signalements.apps.SignalementsConfig',
 ]
+
+# Insertion de Daphne pour remplacer le runserver Django standard si le réseau / loopback est disponible
+try:
+    import twisted.internet.reactor  # noqa: F401
+    INSTALLED_APPS.insert(0, 'daphne')
+except (PermissionError, OSError):
+    pass
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -75,17 +81,35 @@ USE_REDIS = os.environ.get('USE_REDIS', str(USE_DOCKER)).lower() in ('true', '1'
 REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
 REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
 
-# Base de données PostgreSQL (Conteneur Docker PostGIS)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'smartcity_db'),
-        'USER': os.environ.get('DB_USER', 'smartcity_user'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'smartcity_pass'),
-        'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
+# Base de données :
+# - En mode Docker / PostGIS / PostgreSQL : PostgreSQL avec ou sans extension PostGIS
+# - En mode développement local rapide / tests unitaires : fallback SQLite automatique
+DB_ENGINE_ENV = os.environ.get('DB_ENGINE', '').lower()
+USE_POSTGRES = os.environ.get('USE_POSTGRES', str(USE_DOCKER)).lower() in ('true', '1', 'yes') or DB_ENGINE_ENV in ('postgresql', 'postgis')
+
+if USE_POSTGRES:
+    db_engine = (
+        'django.contrib.gis.db.backends.postgis'
+        if DB_ENGINE_ENV == 'postgis'
+        else 'django.db.backends.postgresql'
+    )
+    DATABASES = {
+        'default': {
+            'ENGINE': db_engine,
+            'NAME': os.environ.get('DB_NAME', 'smartcity_db'),
+            'USER': os.environ.get('DB_USER', 'smartcity_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', 'smartcity_pass'),
+            'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Configuration Channel Layers (Django Channels)
 if USE_REDIS:

@@ -16,8 +16,6 @@ import {
   Lock,
   Mail,
   Phone,
-  ShieldCheck,
-  Sparkles,
   Users,
 } from 'lucide-react';
 import {
@@ -346,26 +344,6 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
         <div style={{ maxWidth: 1100, width: '100%' }}>
           {/* En-tête de bienvenue */}
           <div style={{ textAlign: 'center', marginBottom: 44 }}>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '6px 14px',
-                borderRadius: 20,
-                background: 'rgba(56, 189, 248, 0.1)',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                color: '#38bdf8',
-                fontSize: 12.5,
-                fontWeight: 700,
-                marginBottom: 16,
-                letterSpacing: '0.4px',
-                textTransform: 'uppercase',
-              }}
-            >
-              <Sparkles size={14} /> Plateforme Collaborative Intelligente
-            </div>
-
             <h1
               style={{
                 fontSize: 'clamp(26px, 4vw, 36px)',
@@ -564,38 +542,6 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
                 </div>
               );
             })}
-          </div>
-
-          {/* Bandeau d'information de l'architecture collaborative */}
-          <div
-            style={{
-              marginTop: 40,
-              padding: '16px 22px',
-              borderRadius: 12,
-              background: 'rgba(15, 23, 42, 0.65)',
-              border: '1px solid var(--border-color)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: 12,
-              fontSize: 13,
-              color: 'var(--text-dim)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <ShieldCheck size={18} color="#10b981" />
-              <span>
-                Conformité <strong>INPDP</strong> active : floutage automatique des visages et plaques par vision par ordinateur OpenCV.
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <span>PostgreSQL 16 + PostGIS</span>
-              <span>•</span>
-              <span>Redis 7 Channels</span>
-              <span>•</span>
-              <span>DRF JWT Bearer</span>
-            </div>
           </div>
         </div>
       )}

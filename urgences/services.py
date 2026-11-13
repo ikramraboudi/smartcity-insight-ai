@@ -1,4 +1,5 @@
 import math
+import threading
 from datetime import timedelta
 from django.utils import timezone
 from asgiref.sync import async_to_sync
@@ -59,20 +60,32 @@ def traiter_signalement(signalement: SignalementAccident, valide_par_agent=False
     return alerte_proche
 
 def diffuser_alerte_temps_reel(alerte: AlerteAccident):
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        "protection_civile_tunis",
-        {
-            "type": "envoyer_alerte",
-            "data": {
-                "id": alerte.id,
-                "statut": alerte.statut,
-                "gravite": alerte.gravite,
-                "adresse": alerte.adresse,
-                "latitude": alerte.latitude,
-                "longitude": alerte.longitude,
-                "nb_signalements": alerte.nb_signalements,
-                "date_confirmation": alerte.date_confirmation.isoformat() if alerte.date_confirmation else None,
-            }
-        }
-    )
+    alerte_data = {
+        "id": alerte.id,
+        "statut": alerte.statut,
+        "gravite": alerte.gravite,
+        "adresse": alerte.adresse,
+        "latitude": alerte.latitude,
+        "longitude": alerte.longitude,
+        "nb_signalements": alerte.nb_signalements,
+        "date_confirmation": alerte.date_confirmation.isoformat() if alerte.date_confirmation else None,
+    }
+
+    def _do_send():
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    "protection_civile_tunis",
+                    {
+                        "type": "envoyer_alerte",
+                        "data": alerte_data
+                    }
+                )
+        except Exception:
+            pass
+
+    # Exécution asynchrone non-bloquante avec timeout de sécurité pour la réactivité (< 5s)
+    t = threading.Thread(target=_do_send, daemon=True)
+    t.start()
+    t.join(timeout=0.3)

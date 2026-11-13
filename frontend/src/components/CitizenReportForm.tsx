@@ -4,8 +4,7 @@ import {
   Camera,
   CheckCircle2,
   Clock,
-  Eye,
-  Info,
+  Flame,
   Loader2,
   MapPin,
   Send,
@@ -309,6 +308,14 @@ export const CitizenReportForm: React.FC = () => {
                 <Shield size={14} />
                 <span>
                   Floutage IA INPDP appliqué ({successResult.nb_zones_floutees} zone(s) anonymisée(s))
+                </span>
+              </div>
+            )}
+            {successResult.alerte_liee && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f87171' }}>
+                <Flame size={14} />
+                <span>
+                  Alerte transmise en direct à la Protection Civile (Alerte #{successResult.alerte_liee})
                 </span>
               </div>
             )}

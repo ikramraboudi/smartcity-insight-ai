@@ -7,7 +7,6 @@ import {
   Flame,
   X,
   ChevronRight,
-  ShieldAlert,
 } from 'lucide-react';
 import type { RouteInfo, Caserne } from '../types';
 

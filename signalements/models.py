@@ -128,6 +128,14 @@ class Signalement(models.Model):
         default=Statut.EN_ATTENTE,
         db_index=True
     )
+    alerte_liee = models.ForeignKey(
+        'urgences.AlerteAccident',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='signalements_municipaux',
+        help_text="Alerte d'urgence Protection Civile liée à ce signalement"
+    )
     ip_emetteur = models.GenericIPAddressField(null=True, blank=True, db_index=True)
     date_creation = models.DateTimeField(auto_now_add=True, db_index=True)
     date_mise_a_jour = models.DateTimeField(auto_now=True)

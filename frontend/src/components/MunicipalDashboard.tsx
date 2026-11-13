@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Filter,
+  Flame,
   Image as ImageIcon,
   Layers,
   LogOut,
@@ -1196,6 +1197,25 @@ export const MunicipalDashboard: React.FC = () => {
                         }}
                       >
                         <ShieldCheck size={12} /> INPDP ({s.nb_zones_floutees} zone(s))
+                      </span>
+                    )}
+
+                    {s.alerte_liee && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#f87171',
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid rgba(239, 68, 68, 0.35)',
+                          padding: '1px 8px',
+                          borderRadius: 10,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Flame size={12} /> Protection Civile #{s.alerte_liee}
                       </span>
                     )}
 
