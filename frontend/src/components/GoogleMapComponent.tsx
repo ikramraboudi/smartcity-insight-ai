@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
 import type { Alerte, Caserne, RouteInfo } from '../types';
+import { fetchTrafficSegments, calculateSimulatorRouteDelay } from '../services/api';
 
 interface GoogleMapComponentProps {
   casernes: Caserne[];
@@ -26,6 +27,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   // Leaflet map instances
   const leafletMapRef = useRef<L.Map | null>(null);
   const leafletMarkersRef = useRef<L.LayerGroup | null>(null);
+  const leafletTrafficLayerRef = useRef<L.LayerGroup | null>(null);
   const leafletRouteLayerRef = useRef<L.Polyline | null>(null);
 
   // Distance Haversine helper
@@ -105,6 +107,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     osmLayer.addTo(map);
 
     leafletMarkersRef.current = L.layerGroup().addTo(map);
+    leafletTrafficLayerRef.current = L.layerGroup().addTo(map);
     leafletMapRef.current = map;
 
     // Correction essentielle : Invalidation immédiate et différée pour flexbox & redimensionnement
@@ -127,6 +130,10 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       clearTimeout(t1);
       clearTimeout(t2);
       resizeObserver.disconnect();
+      if (leafletTrafficLayerRef.current) {
+        leafletTrafficLayerRef.current.clearLayers();
+        leafletTrafficLayerRef.current = null;
+      }
       if (leafletMapRef.current) {
         leafletMapRef.current.remove();
         leafletMapRef.current = null;
@@ -205,7 +212,68 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     });
   }, [casernes, alertes, onSelectAlerte]);
 
-  // 3. Calcul de l'itinéraire le plus rapide et tracé sur la carte
+  // 3. Affichage de la couche de trafic simulé en temps réel (Grand Tunis)
+  useEffect(() => {
+    if (!leafletMapRef.current) return;
+    if (!leafletTrafficLayerRef.current) {
+      leafletTrafficLayerRef.current = L.layerGroup().addTo(leafletMapRef.current);
+    }
+
+    if (!trafficLayerActive) {
+      leafletTrafficLayerRef.current.clearLayers();
+      return;
+    }
+
+    let isMounted = true;
+    const updateTrafficPolylines = async () => {
+      const segments = await fetchTrafficSegments();
+      if (!isMounted || !leafletTrafficLayerRef.current) return;
+
+      leafletTrafficLayerRef.current.clearLayers();
+
+      segments.forEach((seg) => {
+        const poly = L.polyline(seg.coordinates as [number, number][], {
+          color: seg.color,
+          weight: seg.has_incident ? 8 : seg.congestion_index >= 3.2 ? 6 : 5,
+          opacity: 0.85,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
+
+        poly.bindPopup(`
+          <div style="color: #0f172a; font-family: sans-serif; font-size: 12px; min-width: 210px;">
+            <strong style="color: #0284c7; font-size: 13px;">🚦 ${seg.name}</strong><br/>
+            <span style="color: #64748b; font-size: 11px;">Zone : ${seg.zone}</span>
+            <div style="margin-top: 6px; display: flex; justify-content: space-between; align-items: center;">
+              <span>Vitesse en direct :</span>
+              <strong style="color: ${seg.color}; font-size: 13px;">${seg.current_speed_kmh} km/h</strong>
+            </div>
+            <div style="font-size: 11px; color: #64748b;">Vitesse max autorisée : ${seg.base_speed_kmh} km/h</div>
+            <div style="margin-top: 6px; padding: 4px 6px; background: #f1f5f9; border-radius: 4px; font-weight: bold; font-size: 11px; color: #334155;">
+              Congestion : <span style="color: ${seg.color};">${seg.congestion_level}</span> (Indice ${seg.congestion_index}/5)
+            </div>
+            ${
+              seg.has_incident
+                ? `<div style="margin-top: 4px; color: #dc2626; font-weight: bold; font-size: 11px;">⚠️ ${seg.incident_description || 'Incident en cours'}</div>`
+                : ''
+            }
+          </div>
+        `);
+
+        poly.addTo(leafletTrafficLayerRef.current!);
+      });
+    };
+
+    updateTrafficPolylines();
+    const interval = setInterval(updateTrafficPolylines, 4000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [trafficLayerActive]);
+
+  // 4. Calcul de l'itinéraire le plus rapide et tracé sur la carte
   useEffect(() => {
     if (!leafletMapRef.current) return;
 
@@ -226,10 +294,6 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       selectedAlerte.latitude,
       selectedAlerte.longitude
     );
-
-    // Estimation vitesse secours urbains avec sirène à Tunis (38 km/h)
-    const rawDuration = Math.round((dis / 38) * 60) + 1;
-    const trafficDelay = trafficLayerActive ? 2 : 0; // estimation trafic en direct
 
     // Points de passage de l'itinéraire
     const latMid = (caserne.latitude + selectedAlerte.latitude) / 2 + 0.0015;
@@ -258,21 +322,56 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       maxZoom: 15,
     });
 
-    onRouteCalculated({
-      caserne,
-      alerte: selectedAlerte,
-      distanceKm: dis,
-      durationMinutes: rawDuration,
-      durationWithTrafficMinutes: rawDuration + trafficDelay,
-      trafficDelayMinutes: trafficDelay,
-      steps: [
-        `Départ de la ${caserne.nom} (${caserne.adresse})`,
-        'Engagement sur artère prioritaire (gyrophares et avertisseur deux-tons 198)',
-        'Traversée rapide du corridor urbain sécurisé',
-        `Arrivée sur le lieu de l'accident : ${selectedAlerte.adresse}`,
-      ],
-      polylineCoordinates: polyCoordinates,
-    });
+    let isCancelled = false;
+
+    const computeAndNotifyRoute = async () => {
+      let rawDuration = Math.round((dis / 38) * 60) + 1;
+      let durationWithTraffic = rawDuration + (trafficLayerActive ? 2 : 0);
+      let trafficDelay = trafficLayerActive ? 2 : 0;
+      let warningMsg: string | undefined = undefined;
+
+      if (trafficLayerActive) {
+        const simRoute = await calculateSimulatorRouteDelay({
+          origin_lat: caserne.latitude,
+          origin_lng: caserne.longitude,
+          destination_lat: selectedAlerte.latitude,
+          destination_lng: selectedAlerte.longitude,
+          emergency_mode: true,
+        });
+
+        if (simRoute && !isCancelled) {
+          rawDuration = Math.round(simRoute.free_flow_duration_min);
+          durationWithTraffic = Math.round(simRoute.traffic_duration_min);
+          trafficDelay = Math.round(simRoute.delay_minutes);
+          warningMsg = simRoute.warning || undefined;
+        }
+      }
+
+      if (!isCancelled) {
+        onRouteCalculated({
+          caserne,
+          alerte: selectedAlerte,
+          distanceKm: dis,
+          durationMinutes: rawDuration,
+          durationWithTrafficMinutes: durationWithTraffic,
+          trafficDelayMinutes: trafficDelay,
+          warning: warningMsg,
+          steps: [
+            `Départ de la ${caserne.nom} (${caserne.adresse})`,
+            'Engagement sur artère prioritaire (gyrophares et avertisseur deux-tons 198)',
+            'Traversée rapide du corridor urbain sécurisé',
+            `Arrivée sur le lieu de l'accident : ${selectedAlerte.adresse}`,
+          ],
+          polylineCoordinates: polyCoordinates,
+        });
+      }
+    };
+
+    computeAndNotifyRoute();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [selectedAlerte, selectedCaserne, trafficLayerActive, getNearestCaserne, onRouteCalculated]);
 
   // Bouton de recentrage rapide sur Tunis

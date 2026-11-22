@@ -1,0 +1,91 @@
+{
+  "evaluation_timestamp": "2026-11-22T20:58:15.075810",
+  "train_samples": 20736,
+  "test_samples": 5184,
+  "chronological_split": {
+    "train_period": "2026-08-01 -> 2026-10-11",
+    "test_period": "2026-10-12 -> 2026-10-29"
+  },
+  "regression_comparison": {
+    "Random Forest Regressor": {
+      "MAE": 0.1588,
+      "RMSE": 0.2009,
+      "R2": 0.9528,
+      "train_time_sec": 0.5
+    },
+    "Gradient Boosting Regressor": {
+      "MAE": 0.153,
+      "RMSE": 0.1923,
+      "R2": 0.9568,
+      "train_time_sec": 2.33
+    }
+  },
+  "best_regression_model": "Gradient Boosting Regressor",
+  "classification_comparison": {
+    "Random Forest Classifier": {
+      "Accuracy": 0.8677,
+      "Precision": 0.867,
+      "Recall": 0.8677,
+      "F1_Score": 0.8672,
+      "train_time_sec": 0.31
+    },
+    "Gradient Boosting Classifier": {
+      "Accuracy": 0.8764,
+      "Precision": 0.8757,
+      "Recall": 0.8764,
+      "F1_Score": 0.8759,
+      "train_time_sec": 7.27
+    }
+  },
+  "best_classification_model": "Gradient Boosting Classifier",
+  "feature_importances": [
+    {
+      "feature": "is_rush_hour",
+      "importance": 0.5653
+    },
+    {
+      "feature": "presence_travaux",
+      "importance": 0.1997
+    },
+    {
+      "feature": "meteo_pluie",
+      "importance": 0.0688
+    },
+    {
+      "feature": "hour",
+      "importance": 0.0372
+    },
+    {
+      "feature": "creneau_horaire_NUIT",
+      "importance": 0.0368
+    },
+    {
+      "feature": "incidents_recents",
+      "importance": 0.0269
+    },
+    {
+      "feature": "length_km",
+      "importance": 0.0191
+    },
+    {
+      "feature": "creneau_horaire_DEJEUNER",
+      "importance": 0.0105
+    },
+    {
+      "feature": "proximity_sensitive",
+      "importance": 0.0061
+    },
+    {
+      "feature": "is_weekend",
+      "importance": 0.0046
+    },
+    {
+      "feature": "creneau_horaire_POINTE_MATIN",
+      "importance": 0.0038
+    },
+    {
+      "feature": "day_of_week",
+      "importance": 0.0031
+    }
+  ]
+}

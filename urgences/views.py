@@ -1,10 +1,48 @@
 import random
+import threading
+import json
+import urllib.request
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from .models import SignalementAccident, AlerteAccident, JournalAudit
 from .services import traiter_signalement, diffuser_alerte_temps_reel
 from .ml_models import prediger_risque_zone
+
+def notifier_simulateur_accident(alerte):
+    """Notifie le simulateur de trafic en tâche de fond pour provoquer un bouchon."""
+    def _worker():
+        try:
+            payload = json.dumps({
+                "alerte_id": alerte.id,
+                "latitude": float(alerte.latitude),
+                "longitude": float(alerte.longitude),
+                "gravite": str(alerte.gravite),
+                "description": f"Accident {alerte.adresse}"
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "http://127.0.0.1:8001/api/traffic/events/accident",
+                data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=1.5)
+        except Exception:
+            pass
+    threading.Thread(target=_worker, daemon=True).start()
+
+def notifier_simulateur_cloture(alerte_id):
+    """Notifie le simulateur de trafic pour rétablir la fluidité."""
+    def _worker():
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:8001/api/traffic/events/clear?alerte_id={alerte_id}",
+                data=b"{}",
+                headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=1.5)
+        except Exception:
+            pass
+    threading.Thread(target=_worker, daemon=True).start()
 
 CASERNES_TUNIS = [
     {
@@ -120,6 +158,7 @@ def simuler_accident(request):
         gravite_estimee=gravite
     )
     alerte = traiter_signalement(sig, valide_par_agent=True)
+    notifier_simulateur_accident(alerte)
     return Response({
         "message": "Alerte d'urgence simulée et diffusée en temps réel",
         "alerte_id": alerte.id,
@@ -147,6 +186,7 @@ def creer_signalement(request):
     )
     valide_par_agent = bool(request.data.get('valide_par_agent', False))
     alerte = traiter_signalement(sig, valide_par_agent=valide_par_agent)
+    notifier_simulateur_accident(alerte)
 
     return Response({
         "message": "Signalement d'accident transmis et traité par la Protection Civile",
@@ -172,6 +212,7 @@ def changer_statut_intervention(request, alerte_id):
         alerte.date_en_intervention = now
     elif nouveau_statut == 'CLOTURE':
         alerte.date_cloture = now
+        notifier_simulateur_cloture(alerte.id)
     alerte.save()
 
     JournalAudit.objects.create(

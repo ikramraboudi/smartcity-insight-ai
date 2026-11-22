@@ -25,10 +25,18 @@ export const RoutePanel: React.FC<RoutePanelProps> = ({
   onClose,
   onValiderIntervention,
 }) => {
-  const { caserne, alerte, distanceKm, durationMinutes, durationWithTrafficMinutes, trafficDelayMinutes, steps } =
-    routeInfo;
+  const {
+    caserne,
+    alerte,
+    distanceKm,
+    durationMinutes,
+    durationWithTrafficMinutes,
+    trafficDelayMinutes,
+    warning,
+    steps,
+  } = routeInfo;
 
-  const isDelay = (trafficDelayMinutes || 0) > 1;
+  const isDelay = (trafficDelayMinutes || 0) > 0.5;
 
   return (
     <div
@@ -176,6 +184,23 @@ export const RoutePanel: React.FC<RoutePanelProps> = ({
             </span>
           </div>
         </div>
+
+        {warning && (
+          <div
+            style={{
+              padding: '8px 12px',
+              borderRadius: '6px',
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              color: '#f87171',
+              fontSize: '11px',
+              fontWeight: 600,
+              lineHeight: 1.4,
+            }}
+          >
+            {warning}
+          </div>
+        )}
 
         {/* Caserne source selector */}
         <div>

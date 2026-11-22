@@ -81,7 +81,28 @@ Ouvrez ensuite votre navigateur sur **http://localhost:5173**.
 
 ---
 
-## 🗺️ Configuration Google Maps & Routes API
+## 🚦 Simulateur de Trafic Autonome (Alternative à Google Maps Traffic)
+
+Pour pallier l'absence ou la limitation de facturation de l'API Google Maps Traffic, un **simulateur de circulation métropolitaine autonome** a été développé dans le projet séparé [`smartcity-traffic-simulator`](../smartcity-traffic-simulator/) :
+
+- **Port d'exécution :** `http://localhost:8001`
+- **Console Web de Contrôle :** `http://localhost:8001/`
+- **Documentation OpenAPI (Swagger) :** `http://localhost:8001/docs`
+- **Intégration directe :**
+  - **Carte Leaflet (`GoogleMapComponent.tsx`)** : Affichage des polylignes des 12 artères de Tunis (Vert, Orange, Rouge, Bloqué) avec vitesse en direct et infobulles interactives lors de l'activation du bouton *Trafic Direct*.
+  - **Calcul d'Itinéraire d'Urgence (`RoutePanel.tsx`)** : Calcul en temps réel de la durée de trajet et du retard effectif selon les tronçons traversés par l'ambulance.
+  - **Modèle IA Risk Map (`RiskMapModal.tsx`)** : Bouton d'auto-synchronisation de l'indice de trafic (`trafic_index`) pour la prédiction Random Forest.
+  - **Passerelle Django (`urgences/views.py`)** : Déclaration automatique d'un bouchon d'accident au simulateur lors d'une alerte et déblocage progressif à la clôture.
+
+### Lancement du simulateur :
+```bash
+cd ../smartcity-traffic-simulator
+./run_simulator.sh    # ou run_simulator.bat sous Windows
+```
+
+---
+
+## 🗺️ Configuration Google Maps & Routes API (Optionnelle)
 
 1. Obtenez une clé API sur la **Google Cloud Console**.
 2. Activez **Maps JavaScript API** et **Routes API** (ou **Directions API**).
@@ -89,4 +110,4 @@ Ouvrez ensuite votre navigateur sur **http://localhost:5173**.
    ```env
    VITE_GOOGLE_MAPS_API_KEY=AIzaSy...
    ```
-*(Un mode Leaflet / OpenStreetMap interactif de secours prend automatiquement le relais si aucune clé n'est fournie).*
+*(En l'absence de clé, la cartographie Leaflet + OpenStreetMap couplée au simulateur de trafic autonome prend automatiquement le relais).*

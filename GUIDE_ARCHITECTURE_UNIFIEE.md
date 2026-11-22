@@ -35,7 +35,8 @@ flowchart LR
 | **Vision par Ordinateur IA** | OpenCV Headless, Pillow (PIL) | Détection automatique des visages/plaques & conformité légale INPDP |
 | **Machine Learning Prédictif** | Scikit-learn, Pandas, NumPy | Modèle Random Forest prédisant l'indice de risque routier (*Risk Map*) |
 | **Base de Données** | PostgreSQL 16 + PostGIS *(avec fallback transparent SQLite)* | Stockage relationnel et calculs spatiaux de proximité (rayon 150m) |
-| **Frontend & Cartographie** | React 19, TypeScript, Vite, Google Maps API, Lucide | Interface réactive Glassmorphism sombre et routage des casernes |
+| **Simulateur de Trafic Autonome** | Python 3, FastAPI, Uvicorn, WebSockets (Port 8001) | Simulation temps réel du réseau routier du Grand Tunis (remplace Google Maps Traffic) |
+| **Frontend & Cartographie** | React 19, TypeScript, Vite, Leaflet, Lucide | Interface réactive Glassmorphism sombre, polylines de trafic et routage secours |
 
 ---
 

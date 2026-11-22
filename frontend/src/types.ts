@@ -41,6 +41,7 @@ export interface RouteInfo {
   durationMinutes: number;
   durationWithTrafficMinutes?: number;
   trafficDelayMinutes?: number;
+  warning?: string;
   steps: string[];
   polylineCoordinates?: [number, number][];
 }
@@ -145,5 +146,48 @@ export interface SignalementStatistiques {
     total_zones_floutees: number;
   };
   taux_resolution_pourcent: number;
+}
+
+// =============================================================================
+// Module Simulateur de Trafic Indépendant (Grand Tunis API)
+// =============================================================================
+
+export interface TrafficSegment {
+  id: string;
+  name: string;
+  zone: string;
+  coordinates: [number, number][];
+  base_speed_kmh: number;
+  current_speed_kmh: number;
+  congestion_level: 'FLUID' | 'MODERATE' | 'HEAVY' | 'BLOCKED';
+  congestion_index: number;
+  color: string;
+  delay_seconds: number;
+  vehicle_density: number;
+  has_incident: boolean;
+  incident_description?: string | null;
+}
+
+export interface TrafficSummary {
+  average_congestion_index: number;
+  global_status: string;
+  active_incidents: number;
+  average_speed_kmh: number;
+  congested_segments_count: number;
+  total_segments: number;
+  preset_name: string;
+  timestamp: string;
+  zone_indices: Record<string, number>;
+}
+
+export interface RouteDelayResponse {
+  distance_km: number;
+  free_flow_duration_min: number;
+  traffic_duration_min: number;
+  delay_minutes: number;
+  traffic_status: string;
+  impacted_segments: string[];
+  congestion_factor: number;
+  warning?: string | null;
 }
 

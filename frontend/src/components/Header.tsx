@@ -172,7 +172,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Traffic Toggle Button */}
         <button
           onClick={onToggleTraffic}
-          title="Afficher le trafic routier en direct sur Tunis"
+          title="Afficher le trafic routier simulé en direct sur le Grand Tunis (Port 8001)"
           style={{
             backgroundColor: trafficLayerActive ? 'rgba(16, 185, 129, 0.18)' : '#1e293b',
             border: `1px solid ${trafficLayerActive ? '#10b981' : '#334155'}`,
@@ -185,10 +185,23 @@ export const Header: React.FC<HeaderProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
+            boxShadow: trafficLayerActive ? '0 0 10px rgba(16, 185, 129, 0.25)' : 'none',
           }}
         >
           <Car size={15} />
           <span>Trafic Direct</span>
+          {trafficLayerActive && (
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: '#34d399',
+                boxShadow: '0 0 6px #34d399',
+                display: 'inline-block',
+              }}
+            />
+          )}
         </button>
 
         {/* Risk Map IA Button */}

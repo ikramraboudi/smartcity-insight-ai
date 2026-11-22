@@ -10,6 +10,9 @@ import {
   SignalementStatistiques,
   StatutSignalement,
   UserSession,
+  TrafficSegment,
+  TrafficSummary,
+  RouteDelayResponse,
 } from '../types';
 
 export const BACKEND_URL =
@@ -414,4 +417,98 @@ export async function predictRiskMap(params: {
 }): Promise<RiskMapResult> {
   const res = await apiClient.post('urgences/risk-map/', params);
   return res.data.donnees_zone;
+}
+
+// =============================================================================
+// Client API pour le Simulateur de Trafic Autonome (Grand Tunis - Port 8001)
+// =============================================================================
+
+export const TRAFFIC_SIMULATOR_URL =
+  import.meta.env.VITE_TRAFFIC_SIMULATOR_URL || 'http://127.0.0.1:8001';
+
+export async function fetchTrafficSegments(): Promise<TrafficSegment[]> {
+  try {
+    const res = await axios.get<TrafficSegment[]>(`${TRAFFIC_SIMULATOR_URL}/api/traffic/segments`, {
+      timeout: 3000,
+    });
+    return res.data;
+  } catch (err) {
+    console.warn('Simulateur de trafic inaccessible (utilise fallback par défaut):', err);
+    return [];
+  }
+}
+
+export async function fetchTrafficSummary(): Promise<TrafficSummary | null> {
+  try {
+    const res = await axios.get<TrafficSummary>(`${TRAFFIC_SIMULATOR_URL}/api/traffic/summary`, {
+      timeout: 3000,
+    });
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function calculateSimulatorRouteDelay(params: {
+  origin_lat: number;
+  origin_lng: number;
+  destination_lat: number;
+  destination_lng: number;
+  emergency_mode?: boolean;
+}): Promise<RouteDelayResponse | null> {
+  try {
+    const res = await axios.post<RouteDelayResponse>(
+      `${TRAFFIC_SIMULATOR_URL}/api/traffic/route-delay`,
+      {
+        origin_lat: params.origin_lat,
+        origin_lng: params.origin_lng,
+        destination_lat: params.destination_lat,
+        destination_lng: params.destination_lng,
+        emergency_mode: params.emergency_mode ?? true,
+      },
+      { timeout: 3000 }
+    );
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchLiveRiskTrafficIndex(): Promise<number | null> {
+  try {
+    const res = await axios.get<{ global_trafic_index: number }>(
+      `${TRAFFIC_SIMULATOR_URL}/api/traffic/zone-risk-data`,
+      { timeout: 3000 }
+    );
+    return res.data.global_trafic_index;
+  } catch {
+    return null;
+  }
+}
+
+export async function notifyTrafficSimulatorAccident(payload: {
+  latitude: number;
+  longitude: number;
+  gravite?: string;
+  description?: string;
+  alerte_id?: number;
+}): Promise<void> {
+  try {
+    await axios.post(`${TRAFFIC_SIMULATOR_URL}/api/traffic/events/accident`, payload, {
+      timeout: 2500,
+    });
+  } catch {
+    // Non-bloquant
+  }
+}
+
+export async function clearTrafficSimulatorAccidents(alerteId?: number): Promise<void> {
+  try {
+    const url = alerteId
+      ? `${TRAFFIC_SIMULATOR_URL}/api/traffic/events/clear?alerte_id=${alerteId}`
+      : `${TRAFFIC_SIMULATOR_URL}/api/traffic/events/clear`;
+    await axios.post(url, {}, { timeout: 2500 });
+  } catch {
+    // Non-bloquant
+  }
 }

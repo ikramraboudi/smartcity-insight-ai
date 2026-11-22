@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ShieldAlert, X, Activity, CloudRain, Construction, AlertTriangle } from 'lucide-react';
-import { predictRiskMap } from '../services/api';
+import { ShieldAlert, X, Activity, CloudRain, Construction, AlertTriangle, Zap } from 'lucide-react';
+import { predictRiskMap, fetchLiveRiskTrafficIndex } from '../services/api';
 import { RiskMapResult } from '../types';
 
 interface RiskMapModalProps {
@@ -14,6 +14,7 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
   const [meteoPluie, setMeteoPluie] = useState(0);
   const [incidentsRecents, setIncidentsRecents] = useState(3);
   const [loading, setLoading] = useState(false);
+  const [syncingTrafic, setSyncingTrafic] = useState(false);
   const [result, setResult] = useState<RiskMapResult | null>(null);
 
   if (!isOpen) return null;
@@ -32,6 +33,20 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncTrafic = async () => {
+    setSyncingTrafic(true);
+    try {
+      const liveIdx = await fetchLiveRiskTrafficIndex();
+      if (liveIdx !== null) {
+        setTraficIndex(Number(liveIdx.toFixed(1)));
+      }
+    } catch (err) {
+      console.error('Erreur synchronisation trafic:', err);
+    } finally {
+      setSyncingTrafic(false);
     }
   };
 
@@ -115,11 +130,35 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
         {/* Sliders Form */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', marginBottom: '6px' }}>
               <span style={{ color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Activity size={15} color="#38bdf8" /> Indice de Trafic (1.0 = fluide, 5.0 = congestion sévère)
               </span>
-              <strong style={{ color: '#38bdf8' }}>{traficIndex.toFixed(1)}</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={handleSyncTrafic}
+                  disabled={syncingTrafic}
+                  title="Récupérer l'indice de trafic en direct depuis le simulateur"
+                  style={{
+                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                    borderRadius: '4px',
+                    color: '#38bdf8',
+                    fontSize: '11px',
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Zap size={12} />
+                  <span>{syncingTrafic ? 'Sync...' : 'Auto-Sync Simulateur'}</span>
+                </button>
+                <strong style={{ color: '#38bdf8', fontSize: '14px' }}>{traficIndex.toFixed(1)}</strong>
+              </div>
             </div>
             <input
               type="range"

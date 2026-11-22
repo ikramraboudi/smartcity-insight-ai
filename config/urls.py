@@ -10,6 +10,7 @@ from urgences.views import (
     lister_casernes,
     simuler_accident,
 )
+from ml_congestion.api_views import predict_congestion_api, get_model_metrics_api
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -23,6 +24,9 @@ urlpatterns = [
     path('api/urgences/recevoir-accident/', creer_signalement, name='recevoir_accident_etud2'),
     path('api/urgences/alerte/<int:alerte_id>/statut/', changer_statut_intervention, name='changer_statut_intervention'),
     path('api/urgences/risk-map/', calculer_risk_map_zone, name='calculer_risk_map_zone'),
+    # Module D — Prédiction de Congestion (Machine Learning)
+    path('api/ml/congestion/predict/', predict_congestion_api, name='predict_congestion_ml'),
+    path('api/ml/congestion/metrics/', get_model_metrics_api, name='get_model_metrics_ml'),
 ]
 
 if settings.DEBUG:
