@@ -3,11 +3,26 @@ import threading
 import json
 import urllib.request
 from django.utils import timezone
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .models import SignalementAccident, AlerteAccident, JournalAudit
-from .services import traiter_signalement, diffuser_alerte_temps_reel
-from .ml_models import prediger_risque_zone
+from .models import SignalementAccident, AlerteAccident, JournalAudit, JournalAuditIntervention
+from .services import (
+    traiter_signalement,
+    diffuser_alerte_temps_reel,
+    enregistrer_changement_statut,
+)
+from .ml_models import (
+    prediger_risque_zone,
+    get_toutes_les_zones_risk_map,
+    SECTEURS_TUNIS,
+)
+from .llm_assistant import interroger_assistant_llm
+from .simulation import (
+    executer_simulation_fausse_alerte,
+    executer_simulation_accident_confirme,
+    executer_simulation_risk_map_tunis,
+)
 
 def notifier_simulateur_accident(alerte):
     """Notifie le simulateur de trafic en tâche de fond pour provoquer un bouchon."""
@@ -124,6 +139,7 @@ def lister_alertes(request):
             "statut": a.statut,
             "gravite": a.gravite,
             "adresse": a.adresse,
+            "zone_nom": a.zone_nom,
             "latitude": a.latitude,
             "longitude": a.longitude,
             "nb_signalements": a.nb_signalements,
@@ -197,42 +213,127 @@ def creer_signalement(request):
 
 @api_view(['POST'])
 def changer_statut_intervention(request, alerte_id):
+    """
+    Workflow strict d'intervention de la Protection Civile :
+    'recue' (CONFIRME) -> 'prise_en_charge' -> 'en_cours' (EN_INTERVENTION) -> 'cloturee' (CLOTURE)
+    avec création automatique dans JournalAuditIntervention et diffusion WebSocket.
+    """
     try:
         alerte = AlerteAccident.objects.get(id=alerte_id)
     except AlerteAccident.DoesNotExist:
         return Response({"error": "Alerte non trouvée"}, status=404)
 
-    nouveau_statut = request.data.get('statut')
-    now = timezone.now()
+    statut_brut = str(request.data.get('statut', '')).strip().upper()
+    # Normalisation des statuts
+    mapping_statuts = {
+        'RECUE': 'CONFIRME',
+        'CONFIRME': 'CONFIRME',
+        'CONFIRMEE': 'CONFIRME',
+        'PRISE_EN_CHARGE': 'PRISE_EN_CHARGE',
+        'EN_COURS': 'EN_INTERVENTION',
+        'EN_INTERVENTION': 'EN_INTERVENTION',
+        'CLOTURE': 'CLOTURE',
+        'CLOTUREE': 'CLOTURE',
+    }
+    nouveau_statut = mapping_statuts.get(statut_brut, statut_brut)
 
-    alerte.statut = nouveau_statut
-    if nouveau_statut == 'PRISE_EN_CHARGE':
-        alerte.date_prise_en_charge = now
-    elif nouveau_statut == 'EN_INTERVENTION':
-        alerte.date_en_intervention = now
-    elif nouveau_statut == 'CLOTURE':
-        alerte.date_cloture = now
-        notifier_simulateur_cloture(alerte.id)
-    alerte.save()
+    note = request.data.get('note', '')
+    matricule = request.data.get('matricule', '')
+    intervenant = request.user if request.user.is_authenticated else None
 
-    JournalAudit.objects.create(
+    alerte = enregistrer_changement_statut(
         alerte=alerte,
-        action=f"Changement de statut vers {nouveau_statut}"
+        nouveau_statut=nouveau_statut,
+        intervenant=intervenant,
+        matricule=matricule,
+        note=note
     )
-    diffuser_alerte_temps_reel(alerte)
-    return Response({"alerte_id": alerte.id, "nouveau_statut": alerte.statut, "horodatage": now})
+
+    if nouveau_statut == 'CLOTURE':
+        notifier_simulateur_cloture(alerte.id)
+
+    return Response({
+        "alerte_id": alerte.id,
+        "nouveau_statut": alerte.statut,
+        "date_prise_en_charge": alerte.date_prise_en_charge.isoformat() if alerte.date_prise_en_charge else None,
+        "date_en_intervention": alerte.date_en_intervention.isoformat() if alerte.date_en_intervention else None,
+        "date_cloture": alerte.date_cloture.isoformat() if alerte.date_cloture else None,
+    })
+
+@api_view(['GET'])
+def obtenir_audit_intervention(request, alerte_id):
+    """Retourne l'historique complet d'audit pour une intervention donnée."""
+    try:
+        alerte = AlerteAccident.objects.get(id=alerte_id)
+    except AlerteAccident.DoesNotExist:
+        return Response({"error": "Alerte non trouvée"}, status=404)
+
+    audits = JournalAuditIntervention.objects.filter(alerte=alerte).order_by('-horodatage')
+    data = []
+    for a in audits:
+        data.append({
+            "id": a.id,
+            "statut_precedent": a.statut_precedent,
+            "nouveau_statut": a.nouveau_statut,
+            "horodatage": a.horodatage.isoformat(),
+            "note_intervention": a.note_intervention,
+            "matricule_intervenant": a.matricule_intervenant or (a.intervenant.username if a.intervenant else "Opérateur PC"),
+        })
+    return Response(data)
 
 @api_view(['POST'])
 def calculer_risk_map_zone(request):
-    """Endpoint pour obtenir le score de risque d'une zone et ses facteurs explicatifs"""
-    trafic = float(request.data.get('trafic_index', 1.5))
+    """Endpoint pour obtenir le score de risque d'une zone et ses facteurs explicatifs personnalisés."""
+    trafic = float(request.data.get('trafic_index', 2.0))
     travaux = int(request.data.get('presence_travaux', 0))
     pluie = int(request.data.get('meteo_pluie', 0))
     incidents = int(request.data.get('incidents_recents', 1))
 
     resultat_ml = prediger_risque_zone(trafic, travaux, pluie, incidents)
-
     return Response({
         "message": "Calcul de la Risk Map effectué avec succès",
         "donnees_zone": resultat_ml
     })
+
+@api_view(['GET'])
+def lister_zones_risk_map(request):
+    """Retourne la cartographie complète des secteurs du Grand Tunis avec scores et facteurs explicatifs."""
+    pluie = int(request.GET.get('meteo_pluie', 0))
+    travaux = int(request.GET.get('presence_travaux', 0))
+    zones = get_toutes_les_zones_risk_map(meteo_pluie=pluie, presence_travaux=travaux)
+    return Response(zones)
+
+@api_view(['POST'])
+def assistant_llm_decisionnel(request):
+    """
+    Endpoint RAG Strict pour l'Assistant IA Décisionnel de la Protection Civile.
+    Injecte les données réelles vérifiées et interdit formellement l'hallucination.
+    """
+    question = request.data.get('question', '').strip()
+    if not question:
+        return Response({"error": "La question ne peut pas être vide."}, status=400)
+
+    resultat = interroger_assistant_llm(question)
+    return Response(resultat)
+
+@api_view(['POST'])
+def endpoint_simulation_urgences(request):
+    """
+    Endpoint de pilotage pour la soutenance (Mode Démo Jury) :
+    - mode 'fausse_alerte' : test neutralisation fausse alerte isolée
+    - mode 'accident_confirme' : test clustering PostGIS 3 signalements < 5s
+    - mode 'risk_map' : génération cartographie Tunis (vert, orange, rouge)
+    """
+    mode = str(request.data.get('mode', 'accident_confirme')).lower().strip()
+
+    if mode == 'fausse_alerte':
+        res = executer_simulation_fausse_alerte()
+    elif mode == 'accident_confirme':
+        res = executer_simulation_accident_confirme()
+    elif mode == 'risk_map':
+        res = executer_simulation_risk_map_tunis()
+    else:
+        return Response({"error": f"Mode inconnu '{mode}'. Choix: fausse_alerte, accident_confirme, risk_map"}, status=400)
+
+    return Response(res)
+

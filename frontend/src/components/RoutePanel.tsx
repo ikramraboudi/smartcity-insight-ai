@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Navigation,
   Clock,
@@ -7,8 +7,12 @@ import {
   Flame,
   X,
   ChevronRight,
+  ShieldCheck,
+  History,
+  FileText,
 } from 'lucide-react';
-import type { RouteInfo, Caserne } from '../types';
+import type { RouteInfo, Caserne, AuditInterventionItem } from '../types';
+import { fetchAuditIntervention } from '../services/api';
 
 interface RoutePanelProps {
   routeInfo: RouteInfo;
@@ -36,7 +40,38 @@ export const RoutePanel: React.FC<RoutePanelProps> = ({
     steps,
   } = routeInfo;
 
+  const [audits, setAudits] = useState<AuditInterventionItem[]>([]);
+  const [loadingAudit, setLoadingAudit] = useState<boolean>(false);
+  const [showAuditSection, setShowAuditSection] = useState<boolean>(true);
+
   const isDelay = (trafficDelayMinutes || 0) > 0.5;
+
+  useEffect(() => {
+    let isMounted = true;
+    if (alerte && alerte.id) {
+      setLoadingAudit(true);
+      fetchAuditIntervention(alerte.id)
+        .then((data) => {
+          if (isMounted) setAudits(data);
+        })
+        .finally(() => {
+          if (isMounted) setLoadingAudit(false);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [alerte?.id, alerte?.statut]);
+
+  const formatAuditDate = (isoStr: string) => {
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return isoStr;
+    }
+  };
+
 
   return (
     <div
@@ -275,7 +310,7 @@ export const RoutePanel: React.FC<RoutePanelProps> = ({
 
         {/* Step-by-step turn instructions */}
         {steps && steps.length > 0 && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginBottom: '6px', letterSpacing: '0.04em' }}>
               ÉTAPES DE NAVIGATION :
             </label>
@@ -285,7 +320,7 @@ export const RoutePanel: React.FC<RoutePanelProps> = ({
                 border: '1px solid #1e293b',
                 borderRadius: '6px',
                 padding: '10px',
-                maxHeight: '150px',
+                maxHeight: '120px',
                 overflowY: 'auto',
                 fontSize: '11px',
                 display: 'flex',
@@ -312,7 +347,83 @@ export const RoutePanel: React.FC<RoutePanelProps> = ({
           </div>
         )}
 
+        {/* Section Journal d'Audit & Traçabilité de l'Intervention */}
+        <div style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 6,
+              cursor: 'pointer',
+            }}
+            onClick={() => setShowAuditSection(!showAuditSection)}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#38bdf8' }}>
+              <History size={13} />
+              <span>JOURNAL D'AUDIT ({audits.length})</span>
+            </div>
+            <span style={{ fontSize: 10, color: '#64748b' }}>
+              {showAuditSection ? 'Masquer' : 'Afficher'}
+            </span>
+          </div>
+
+          {showAuditSection && (
+            <div
+              style={{
+                backgroundColor: '#090e1a',
+                border: '1px solid #1e293b',
+                borderRadius: '6px',
+                padding: '8px',
+                maxHeight: '140px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}
+            >
+              {loadingAudit ? (
+                <div style={{ fontSize: 11, color: '#64748b', textAlign: 'center', padding: 6 }}>
+                  Chargement des audits...
+                </div>
+              ) : audits.length === 0 ? (
+                <div style={{ fontSize: 11, color: '#64748b', textAlign: 'center', padding: 6 }}>
+                  Aucun changement d'état enregistré pour le moment.
+                </div>
+              ) : (
+                audits.map((a) => (
+                  <div
+                    key={a.id}
+                    style={{
+                      borderBottom: '1px solid #1e293b',
+                      paddingBottom: 4,
+                      fontSize: 10.5,
+                      color: '#cbd5e1',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8' }}>
+                      <span>🕒 {formatAuditDate(a.horodatage)}</span>
+                      <strong style={{ color: '#38bdf8' }}>{a.matricule_intervenant || 'Opérateur'}</strong>
+                    </div>
+                    <div style={{ marginTop: 2 }}>
+                      <span style={{ color: '#f87171' }}>{a.statut_precedent}</span>
+                      <span style={{ color: '#64748b' }}> ➔ </span>
+                      <span style={{ color: '#34d399', fontWeight: 700 }}>{a.nouveau_statut}</span>
+                    </div>
+                    {a.note_intervention && (
+                      <div style={{ color: '#94a3b8', fontStyle: 'italic', marginTop: 2 }}>
+                        "{a.note_intervention}"
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Dispatch Action Button */}
+
         <button
           onClick={onValiderIntervention}
           style={{

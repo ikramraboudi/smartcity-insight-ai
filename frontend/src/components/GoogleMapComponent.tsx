@@ -1,7 +1,11 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import L from 'leaflet';
-import type { Alerte, Caserne, RouteInfo } from '../types';
-import { fetchTrafficSegments, calculateSimulatorRouteDelay } from '../services/api';
+import type { Alerte, Caserne, RouteInfo, ZoneRiskMap } from '../types';
+import {
+  fetchTrafficSegments,
+  calculateSimulatorRouteDelay,
+  fetchZonesRiskMap,
+} from '../services/api';
 
 interface GoogleMapComponentProps {
   casernes: Caserne[];
@@ -24,11 +28,17 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // État d'affichage de la couche Risk Map
+  const [riskMapLayerActive, setRiskMapLayerActive] = useState<boolean>(true);
+  const [zonesRisk, setZonesRisk] = useState<ZoneRiskMap[]>([]);
+
   // Leaflet map instances
   const leafletMapRef = useRef<L.Map | null>(null);
   const leafletMarkersRef = useRef<L.LayerGroup | null>(null);
   const leafletTrafficLayerRef = useRef<L.LayerGroup | null>(null);
+  const leafletRiskLayerRef = useRef<L.LayerGroup | null>(null);
   const leafletRouteLayerRef = useRef<L.Polyline | null>(null);
+
 
   // Distance Haversine helper
   const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -108,6 +118,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
     leafletMarkersRef.current = L.layerGroup().addTo(map);
     leafletTrafficLayerRef.current = L.layerGroup().addTo(map);
+    leafletRiskLayerRef.current = L.layerGroup().addTo(map);
     leafletMapRef.current = map;
 
     // Correction essentielle : Invalidation immédiate et différée pour flexbox & redimensionnement
@@ -130,6 +141,10 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       clearTimeout(t1);
       clearTimeout(t2);
       resizeObserver.disconnect();
+      if (leafletRiskLayerRef.current) {
+        leafletRiskLayerRef.current.clearLayers();
+        leafletRiskLayerRef.current = null;
+      }
       if (leafletTrafficLayerRef.current) {
         leafletTrafficLayerRef.current.clearLayers();
         leafletTrafficLayerRef.current = null;
@@ -140,6 +155,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       }
     };
   }, []);
+
 
   // 2. Mise à jour des marqueurs (Casernes 🚒 et Accidents 🚨)
   useEffect(() => {
@@ -273,7 +289,71 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     };
   }, [trafficLayerActive]);
 
+  // 3bis. Affichage de la couche Risk Map (Secteurs colorés vert/orange/rouge & facteurs)
+  useEffect(() => {
+    let isMounted = true;
+    fetchZonesRiskMap().then((data) => {
+      if (isMounted) setZonesRisk(data);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!leafletMapRef.current) return;
+    if (!leafletRiskLayerRef.current) {
+      leafletRiskLayerRef.current = L.layerGroup().addTo(leafletMapRef.current);
+    }
+
+    leafletRiskLayerRef.current.clearLayers();
+    if (!riskMapLayerActive) return;
+
+    zonesRisk.forEach((z) => {
+      const color =
+        z.niveau_couleur === 'rouge'
+          ? '#ef4444'
+          : z.niveau_couleur === 'orange'
+          ? '#f59e0b'
+          : '#10b981';
+
+      const circle = L.circle([z.latitude, z.longitude], {
+        radius: 380,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.22,
+        weight: 2,
+        dashArray: '5, 5',
+      });
+
+      const facteursHtml = (z.facteurs_explicatifs || [])
+        .map((f) => `<li>${f}</li>`)
+        .join('');
+
+      circle.bindPopup(`
+        <div style="color: #0f172a; font-family: sans-serif; font-size: 12px; min-width: 210px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <strong style="color: ${color}; font-size: 13px;">🛡️ ${z.zone_nom}</strong>
+            <span style="background: ${color}22; color: ${color}; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;">
+              ${z.score_risque_pourcentage}%
+            </span>
+          </div>
+          <span style="color: #64748b; font-size: 11px;">Tronçon : ${z.type_troncon || 'Zone urbaine'}</span>
+          <div style="margin-top: 6px; padding: 4px 6px; background: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0;">
+            <strong style="font-size: 10.5px; color: #334155;">Facteurs explicatifs :</strong>
+            <ul style="margin: 2px 0 0 0; padding-left: 14px; font-size: 10.5px; color: #475569;">
+              ${facteursHtml}
+            </ul>
+          </div>
+        </div>
+      `);
+
+      circle.addTo(leafletRiskLayerRef.current!);
+    });
+  }, [zonesRisk, riskMapLayerActive]);
+
   // 4. Calcul de l'itinéraire le plus rapide et tracé sur la carte
+
   useEffect(() => {
     if (!leafletMapRef.current) return;
 
@@ -396,15 +476,19 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         }}
       />
 
-      {/* Bouton ergonomique de recentrage sur Tunis */}
+      {/* Boutons de contrôle tactique flottants */}
       <div
         style={{
           position: 'absolute',
           top: '80px',
           left: '12px',
           zIndex: 30,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
         }}
       >
+        {/* Recentrage sur Tunis */}
         <button
           onClick={handleRecenter}
           title="Recentrer la carte sur Tunis Centre"
@@ -425,7 +509,30 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         >
           🎯
         </button>
+
+        {/* Toggle Couche Risk Map */}
+        <button
+          onClick={() => setRiskMapLayerActive(!riskMapLayerActive)}
+          title={riskMapLayerActive ? 'Masquer la couche Risk Map' : 'Afficher la couche Risk Map'}
+          style={{
+            backgroundColor: riskMapLayerActive ? 'rgba(239, 68, 68, 0.25)' : '#0f172a',
+            border: riskMapLayerActive ? '1px solid #ef4444' : '1px solid #334155',
+            borderRadius: '6px',
+            width: '34px',
+            height: '34px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: riskMapLayerActive ? '#fca5a5' : '#94a3b8',
+            cursor: 'pointer',
+            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.4)',
+            fontSize: '15px',
+          }}
+        >
+          🛡️
+        </button>
       </div>
+
     </div>
   );
 };

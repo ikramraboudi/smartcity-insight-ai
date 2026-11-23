@@ -5,6 +5,10 @@ import {
   Caserne,
   LoginResponse,
   RiskMapResult,
+  ZoneRiskMap,
+  AuditInterventionItem,
+  AssistantLLMResponse,
+  SimulationResult,
   StatutAlerte,
   Signalement,
   SignalementStatistiques,
@@ -14,6 +18,7 @@ import {
   TrafficSummary,
   RouteDelayResponse,
 } from '../types';
+
 
 export const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
@@ -390,11 +395,49 @@ export async function fetchCasernes(): Promise<Caserne[]> {
 
 export async function updateStatutAlerte(
   alerteId: number,
-  statut: StatutAlerte
+  statut: StatutAlerte,
+  options?: { note?: string; matricule?: string }
 ): Promise<{ alerte_id: number; nouveau_statut: string; horodatage: string }> {
   const res = await apiClient.post(`urgences/alerte/${alerteId}/statut/`, {
     statut,
+    note: options?.note || '',
+    matricule: options?.matricule || '',
   });
+  return res.data;
+}
+
+export async function fetchAuditIntervention(alerteId: number): Promise<AuditInterventionItem[]> {
+  try {
+    const res = await apiClient.get<AuditInterventionItem[]>(`urgences/alerte/${alerteId}/audit/`);
+    return res.data;
+  } catch (err) {
+    console.warn(`Audit indisponible pour alerte ${alerteId}:`, err);
+    return [];
+  }
+}
+
+export async function fetchZonesRiskMap(params?: {
+  meteo_pluie?: number;
+  presence_travaux?: number;
+}): Promise<ZoneRiskMap[]> {
+  try {
+    const res = await apiClient.get<ZoneRiskMap[]>('urgences/risk-map/zones/', { params });
+    return res.data;
+  } catch (err) {
+    console.warn('Cartographie Risk Map indisponible:', err);
+    return [];
+  }
+}
+
+export async function askAssistantLLM(question: string): Promise<AssistantLLMResponse> {
+  const res = await apiClient.post<AssistantLLMResponse>('urgences/assistant/', { question });
+  return res.data;
+}
+
+export async function triggerSimulation(
+  mode: 'fausse_alerte' | 'accident_confirme' | 'risk_map'
+): Promise<SimulationResult> {
+  const res = await apiClient.post<SimulationResult>('urgences/simulate/', { mode });
   return res.data;
 }
 
@@ -418,6 +461,7 @@ export async function predictRiskMap(params: {
   const res = await apiClient.post('urgences/risk-map/', params);
   return res.data.donnees_zone;
 }
+
 
 // =============================================================================
 // Client API pour le Simulateur de Trafic Autonome (Grand Tunis - Port 8001)

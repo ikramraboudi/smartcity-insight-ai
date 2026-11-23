@@ -49,8 +49,67 @@ export interface RouteInfo {
 export interface RiskMapResult {
   score_risque_pourcentage: number;
   niveau_risk_map: string;
+  niveau_couleur?: 'vert' | 'orange' | 'rouge';
   facteurs_explicatifs: string[];
 }
+
+export interface ZoneRiskMap {
+  zone_id: string;
+  zone_nom: string;
+  type_troncon?: string;
+  latitude: number;
+  longitude: number;
+  score_risque_pourcentage: number;
+  niveau_couleur: 'vert' | 'orange' | 'rouge';
+  niveau_risk_map: string;
+  facteurs_explicatifs: string[];
+  details?: {
+    accidents_30j: number;
+    indice_trafic: number;
+    criticite_geometrie: number;
+    meteo_pluie: number;
+    presence_travaux: number;
+  };
+}
+
+export interface AuditInterventionItem {
+  id: number;
+  statut_precedent: string;
+  nouveau_statut: string;
+  horodatage: string;
+  note_intervention: string;
+  matricule_intervenant: string;
+}
+
+export interface AssistantLLMResponse {
+  question: string;
+  reponse: string;
+  moteur: string;
+  contexte_utilise: {
+    nb_alertes_actives: number;
+    nb_zones_rouges: number;
+    horodatage: string;
+  };
+}
+
+export interface SimulationResult {
+  scenario: string;
+  description: string;
+  alerte_id?: number;
+  statut_alerte?: string;
+  nb_signalements_concordants?: number;
+  nb_signalements_fusionnes?: number;
+  alarme_declenchee?: boolean;
+  diffusion_temps_reel?: string;
+  message: string;
+  repartition?: {
+    rouges: number;
+    oranges: number;
+    vertes: number;
+  };
+  secteurs?: ZoneRiskMap[];
+}
+
 
 // =============================================================================
 // Module Signalements Citoyens & Dashboard Municipal (Étudiant 2)

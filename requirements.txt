@@ -12,11 +12,13 @@ psycopg2-binary>=2.9.9
 # Cache & WebSocket broker
 redis>=5.0.0
 
-# Machine Learning & IA (Risk Map Random Forest)
+# Machine Learning & IA (Risk Map Random Forest & Assistant LLM)
 scikit-learn>=1.5.0
 pandas>=2.2.0
 numpy>=1.26.0
 joblib>=1.4.0
 Pillow
 opencv-python-headless<5
+requests>=2.31.0
+
 
