@@ -841,39 +841,111 @@ export const MunicipalDashboard: React.FC = () => {
 
       {/* Bannière IA Détection d'Anomalies Spatio-Temporelles (Isolation Forest) */}
       <div
-        className={`rounded-xl border p-4 mb-5 transition-colors ${
-          anomalies.length > 0
-            ? 'border-rose-500/45 bg-gradient-to-r from-rose-950/60 via-slate-900/90 to-amber-950/40'
-            : 'border-slate-800 bg-slate-900/60'
-        }`}
+        style={{
+          borderRadius: 12,
+          border:
+            anomalies.length > 0
+              ? '1px solid rgba(239, 68, 68, 0.42)'
+              : '1px solid rgba(56, 189, 248, 0.18)',
+          background:
+            anomalies.length > 0
+              ? 'linear-gradient(135deg, rgba(127, 29, 29, 0.32), rgba(15, 23, 42, 0.88) 55%, rgba(120, 53, 15, 0.24))'
+              : 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(12px)',
+          padding: '16px 20px',
+          marginBottom: 20,
+          transition: 'border-color 0.2s ease, background 0.2s ease',
+        }}
       >
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="flex items-start gap-3">
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <div
-              className={`p-2 rounded-lg border ${
-                anomalies.length > 0
-                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                  : 'bg-sky-500/15 border-sky-500/30 text-sky-300'
-              }`}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                background:
+                  anomalies.length > 0
+                    ? 'rgba(239, 68, 68, 0.18)'
+                    : 'rgba(56, 189, 248, 0.14)',
+                border:
+                  anomalies.length > 0
+                    ? '1px solid rgba(239, 68, 68, 0.4)'
+                    : '1px solid rgba(56, 189, 248, 0.32)',
+                color: anomalies.length > 0 ? '#fda4af' : '#38bdf8',
+              }}
             >
-              <Sparkles className="w-5 h-5" />
+              <Sparkles size={19} />
             </div>
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-bold text-white m-0">
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <h2
+                  style={{
+                    fontSize: 14.5,
+                    fontWeight: 700,
+                    color: 'var(--text-main)',
+                    margin: 0,
+                  }}
+                >
                   Détection d&apos;Anomalies IA ({anomaliesModelName})
                 </h2>
                 {anomalies.length > 0 ? (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/40">
+                  <span
+                    style={{
+                      padding: '2px 10px',
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      background: 'rgba(244, 63, 94, 0.22)',
+                      color: '#fecdd3',
+                      border: '1px solid rgba(244, 63, 94, 0.42)',
+                    }}
+                  >
                     {anomalies.length} alerte(s) active(s)
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  <span
+                    style={{
+                      padding: '2px 10px',
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      background: 'rgba(16, 185, 129, 0.14)',
+                      color: '#6ee7b7',
+                      border: '1px solid rgba(16, 185, 129, 0.32)',
+                    }}
+                  >
                     Aucune accumulation anormale détectée
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 mt-1 mb-0">
+              <p
+                style={{
+                  fontSize: 12.5,
+                  color: 'var(--text-muted)',
+                  margin: '4px 0 0',
+                  lineHeight: 1.45,
+                }}
+              >
                 Surveillance non supervisée des accumulations soudaines (filtrage anti-faux positifs sur incidents isolés).
               </p>
             </div>
@@ -881,51 +953,118 @@ export const MunicipalDashboard: React.FC = () => {
 
           <button
             type="button"
+            className="municipal-glass-btn"
             onClick={() => void handleScanAnomalies()}
             disabled={isScanningAnomalies}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/35 text-sky-200 disabled:opacity-50 cursor-pointer self-start md:self-auto"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 14px',
+              borderRadius: 8,
+              fontSize: 12.5,
+              fontWeight: 600,
+              background: 'rgba(56, 189, 248, 0.14)',
+              border: '1px solid rgba(56, 189, 248, 0.36)',
+              color: '#bae6fd',
+              cursor: isScanningAnomalies ? 'not-allowed' : 'pointer',
+              opacity: isScanningAnomalies ? 0.55 : 1,
+            }}
           >
             <RefreshCw
-              size={13}
+              size={14}
               className={isScanningAnomalies ? 'animate-spin' : ''}
             />
-            {isScanningAnomalies
-              ? 'Analyse ML en cours...'
-              : 'Lancer scan IA (6h)'}
+            <span>
+              {isScanningAnomalies
+                ? 'Analyse ML en cours...'
+                : 'Lancer scan IA (6h)'}
+            </span>
           </button>
         </div>
 
         {anomalies.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+          <div className="municipal-anomalies-grid">
             {anomalies.map((anomalie) => {
               const catLabel =
                 CATEGORIE_META[anomalie.categorie as CategorieSignalement]
                   ?.label || anomalie.categorie;
-              const sevColor =
+              const sevStyle =
                 anomalie.severite === 'CRITIQUE'
-                  ? 'bg-red-500/20 text-red-200 border-red-500/45'
+                  ? {
+                      bg: 'rgba(239, 68, 68, 0.2)',
+                      color: '#fecaca',
+                      border: 'rgba(239, 68, 68, 0.45)',
+                    }
                   : anomalie.severite === 'ELEVEE'
-                    ? 'bg-orange-500/20 text-orange-200 border-orange-500/45'
-                    : 'bg-amber-500/20 text-amber-200 border-amber-500/45';
+                    ? {
+                        bg: 'rgba(249, 115, 22, 0.2)',
+                        color: '#fed7aa',
+                        border: 'rgba(249, 115, 22, 0.45)',
+                      }
+                    : {
+                        bg: 'rgba(245, 158, 11, 0.2)',
+                        color: '#fde68a',
+                        border: 'rgba(245, 158, 11, 0.45)',
+                      };
 
               return (
                 <div
                   key={anomalie.id}
-                  className="rounded-lg border border-slate-700/80 bg-slate-950/75 p-3.5 flex flex-col justify-between gap-2.5"
+                  style={{
+                    borderRadius: 10,
+                    border: '1px solid var(--border-light)',
+                    background: 'rgba(11, 17, 30, 0.85)',
+                    padding: 14,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                  }}
                 >
                   <div>
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                      <div className="flex items-center gap-2">
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span
-                          className={`px-2 py-0.5 rounded text-[10.5px] font-bold border ${sevColor}`}
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            background: sevStyle.bg,
+                            color: sevStyle.color,
+                            border: `1px solid ${sevStyle.border}`,
+                          }}
                         >
                           {anomalie.severite}
                         </span>
-                        <span className="text-xs font-bold text-white">
+                        <span
+                          style={{
+                            fontSize: 12.5,
+                            fontWeight: 700,
+                            color: 'var(--text-main)',
+                          }}
+                        >
                           {anomalie.quartier} · {catLabel}
                         </span>
                       </div>
-                      <span className="text-[11px] font-semibold text-rose-300 tabular-nums">
+                      <span
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          color: '#fda4af',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
                         Score IA :{' '}
                         {anomalie.score_anomalie <= 1
                           ? Math.round(anomalie.score_anomalie * 100)
@@ -933,38 +1072,84 @@ export const MunicipalDashboard: React.FC = () => {
                         %
                       </span>
                     </div>
-                    <p className="text-xs text-slate-300 leading-relaxed m-0">
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: '#cbd5e1',
+                        lineHeight: 1.5,
+                        margin: 0,
+                      }}
+                    >
                       {anomalie.explication}
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                    <span className="text-[11px] text-slate-400">
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      paddingTop: 10,
+                      borderTop: '1px solid var(--border-color)',
+                    }}
+                  >
+                    <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
                       {anomalie.nb_signalements} signalements / {anomalie.fenetre_heures}h
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <button
                         type="button"
+                        className="municipal-glass-btn"
                         onClick={() =>
                           handleFilterZoneFromViz(
                             anomalie.quartier,
                             anomalie.categorie
                           )
                         }
-                        className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 cursor-pointer"
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: 6,
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          background: 'var(--bg-card)',
+                          border: '1px solid var(--border-light)',
+                          color: 'var(--text-main)',
+                          cursor: 'pointer',
+                        }}
                       >
                         Filtrer cette zone
                       </button>
                       <button
                         type="button"
+                        className="municipal-glass-btn"
                         disabled={acknowledgingId === anomalie.id}
                         onClick={() => void handleAcquitterAnomalie(anomalie.id)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 cursor-pointer disabled:opacity-50"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '5px 10px',
+                          borderRadius: 6,
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          background: 'rgba(16, 185, 129, 0.16)',
+                          border: '1px solid rgba(16, 185, 129, 0.42)',
+                          color: '#6ee7b7',
+                          cursor:
+                            acknowledgingId === anomalie.id
+                              ? 'not-allowed'
+                              : 'pointer',
+                          opacity: acknowledgingId === anomalie.id ? 0.5 : 1,
+                        }}
                       >
                         <CheckCircle2 size={12} />
-                        {acknowledgingId === anomalie.id
-                          ? 'Validation...'
-                          : 'Acquitter'}
+                        <span>
+                          {acknowledgingId === anomalie.id
+                            ? 'Validation...'
+                            : 'Acquitter'}
+                        </span>
                       </button>
                     </div>
                   </div>

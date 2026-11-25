@@ -17,20 +17,43 @@ interface MunicipalChartsProps {
 }
 
 const CATEGORIE_META: Record<string, { label: string; color: string }> = {
-  ACCIDENT: { label: 'Accidents', color: 'bg-rose-500' },
-  NID_DE_POULE: { label: 'Nids-de-poule', color: 'bg-amber-500' },
-  ECLAIRAGE: { label: 'Éclairage', color: 'bg-yellow-400' },
-  DECHETS: { label: 'Déchets', color: 'bg-emerald-500' },
-  SIGNALISATION: { label: 'Signalisation', color: 'bg-sky-500' },
-  AUTRE: { label: 'Autres', color: 'bg-slate-400' },
+  ACCIDENT: { label: 'Accidents', color: '#ef4444' },
+  NID_DE_POULE: { label: 'Nids-de-poule', color: '#f59e0b' },
+  ECLAIRAGE: { label: 'Éclairage', color: '#facc15' },
+  DECHETS: { label: 'Déchets', color: '#10b981' },
+  SIGNALISATION: { label: 'Signalisation', color: '#38bdf8' },
+  AUTRE: { label: 'Autres', color: '#94a3b8' },
 };
 
 const GRAVITE_ORDER: Array<{ key: string; label: string; color: string }> = [
-  { key: 'CRITIQUE', label: 'Critique', color: 'bg-red-500' },
-  { key: 'ELEVEE', label: 'Élevée', color: 'bg-orange-500' },
-  { key: 'MOYENNE', label: 'Moyenne', color: 'bg-amber-400' },
-  { key: 'FAIBLE', label: 'Faible', color: 'bg-sky-400' },
+  { key: 'CRITIQUE', label: 'Critique', color: '#ef4444' },
+  { key: 'ELEVEE', label: 'Élevée', color: '#f97316' },
+  { key: 'MOYENNE', label: 'Moyenne', color: '#eab308' },
+  { key: 'FAIBLE', label: 'Faible', color: '#38bdf8' },
 ];
+
+const CARD_STYLE: React.CSSProperties = {
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border-color)',
+  borderRadius: 12,
+  padding: 18,
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'space-between',
+  minWidth: 0,
+};
+
+const EMPTY_STATE_STYLE: React.CSSProperties = {
+  height: 150,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 12.5,
+  color: 'var(--text-dim)',
+  border: '1px dashed var(--border-color)',
+  borderRadius: 8,
+  background: 'rgba(11, 17, 30, 0.45)',
+};
 
 function formatShortDate(isoDate: string): string {
   const parts = isoDate.split('-');
@@ -65,79 +88,163 @@ export const MunicipalCharts: React.FC<MunicipalChartsProps> = ({
     0,
     Math.min(100, stats?.taux_resolution_pourcent ?? 0)
   );
-  const circleRadius = 36;
+  const circleRadius = 35;
   const circleCircumference = 2 * Math.PI * circleRadius;
   const dashOffset =
     circleCircumference - (tauxResolution / 100) * circleCircumference;
 
   return (
-    <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+    <section className="municipal-charts-grid">
       {/* 1. Évolution temporelle */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 flex flex-col justify-between">
-        <div className="flex items-start justify-between gap-2 mb-3">
+      <div style={CARD_STYLE}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 10,
+            marginBottom: 14,
+            minHeight: 40,
+          }}
+        >
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Activity className="w-4 h-4 text-sky-400" />
-              Évolution Temporelle
+            <h3
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: 'var(--text-main)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                margin: 0,
+              }}
+            >
+              <Activity size={16} color="#38bdf8" />
+              <span>Évolution Temporelle</span>
             </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Volumes journaliers par statut (14 derniers jours actifs)
+            <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '3px 0 0' }}>
+              Volumes journaliers (14 derniers jours actifs)
             </p>
           </div>
+
           {hoveredDay && (
-            <div className="text-right text-[11px] bg-slate-950/90 border border-slate-700 rounded-md px-2 py-1">
-              <div className="font-semibold text-white">
+            <div
+              style={{
+                textAlign: 'right',
+                fontSize: 11,
+                background: 'rgba(11, 17, 30, 0.95)',
+                border: '1px solid var(--border-light)',
+                borderRadius: 6,
+                padding: '4px 8px',
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>
                 {formatShortDate(hoveredDay.date)} · {hoveredDay.total} tot.
               </div>
-              <div className="text-slate-400">
-                <span className="text-sky-400">{hoveredDay.en_attente}</span> att. ·{' '}
-                <span className="text-amber-400">{hoveredDay.en_cours}</span> cours ·{' '}
-                <span className="text-emerald-400">{hoveredDay.resolus}</span> rés.
+              <div style={{ color: 'var(--text-muted)', marginTop: 1 }}>
+                <span style={{ color: '#38bdf8' }}>{hoveredDay.en_attente}</span> att. ·{' '}
+                <span style={{ color: '#f59e0b' }}>{hoveredDay.en_cours}</span> cours ·{' '}
+                <span style={{ color: '#10b981' }}>{hoveredDay.resolus}</span> rés.
               </div>
             </div>
           )}
         </div>
 
         {visibleEvolution.length === 0 ? (
-          <div className="h-36 flex items-center justify-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+          <div style={EMPTY_STATE_STYLE}>
             Aucune donnée sur la période sélectionnée
           </div>
         ) : (
           <div>
-            <div className="h-36 flex items-end gap-1.5 pt-2 pb-1 px-1 border-b border-slate-800">
+            <div
+              style={{
+                height: 150,
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: 6,
+                padding: '10px 8px 0',
+                borderBottom: '1px solid var(--border-color)',
+                background: 'rgba(11, 17, 30, 0.5)',
+                borderRadius: '8px 8px 0 0',
+              }}
+            >
               {visibleEvolution.map((day) => {
-                const barHeightPct = Math.max(8, Math.round((day.total / maxDayTotal) * 100));
-                const resoluRatio = day.total > 0 ? (day.resolus / day.total) * 100 : 0;
-                const coursRatio = day.total > 0 ? (day.en_cours / day.total) * 100 : 0;
-                const attenteRatio = Math.max(0, 100 - resoluRatio - coursRatio);
+                const barHeightPct = Math.max(
+                  10,
+                  Math.round((day.total / maxDayTotal) * 100)
+                );
+                const resoluRatio =
+                  day.total > 0 ? (day.resolus / day.total) * 100 : 0;
+                const coursRatio =
+                  day.total > 0 ? (day.en_cours / day.total) * 100 : 0;
+                const attenteRatio = Math.max(
+                  0,
+                  100 - resoluRatio - coursRatio
+                );
 
                 return (
                   <div
                     key={day.date}
+                    className="municipal-bar-col"
                     onMouseEnter={() => setHoveredDay(day)}
                     onMouseLeave={() => setHoveredDay(null)}
-                    className="flex-1 h-full flex flex-col justify-end items-center group cursor-pointer"
+                    title={`${formatShortDate(day.date)} : ${day.total} total (${day.en_attente} att., ${day.en_cours} en cours, ${day.resolus} résolus)`}
+                    style={{
+                      flex: 1,
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'flex-end',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      minWidth: 10,
+                    }}
                   >
                     <div
-                      style={{ height: `${barHeightPct}%` }}
-                      className="w-full max-w-[20px] rounded-t-sm overflow-hidden flex flex-col justify-end bg-slate-800/80 ring-1 ring-slate-700/60 group-hover:ring-sky-400 transition-all"
+                      className="municipal-bar-inner"
+                      style={{
+                        width: '100%',
+                        maxWidth: 24,
+                        height: `${barHeightPct}%`,
+                        borderRadius: '4px 4px 0 0',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'flex-end',
+                        background: 'rgba(30, 41, 59, 0.85)',
+                        border: '1px solid rgba(51, 65, 85, 0.75)',
+                        transition: 'all 0.2s ease',
+                      }}
                     >
                       {attenteRatio > 0 && (
                         <div
-                          style={{ height: `${attenteRatio}%` }}
-                          className="w-full bg-sky-400/90"
+                          style={{
+                            width: '100%',
+                            height: `${attenteRatio}%`,
+                            background: '#38bdf8',
+                            flexShrink: 0,
+                          }}
                         />
                       )}
                       {coursRatio > 0 && (
                         <div
-                          style={{ height: `${coursRatio}%` }}
-                          className="w-full bg-amber-400/90"
+                          style={{
+                            width: '100%',
+                            height: `${coursRatio}%`,
+                            background: '#f59e0b',
+                            flexShrink: 0,
+                          }}
                         />
                       )}
                       {resoluRatio > 0 && (
                         <div
-                          style={{ height: `${resoluRatio}%` }}
-                          className="w-full bg-emerald-400/90"
+                          style={{
+                            width: '100%',
+                            height: `${resoluRatio}%`,
+                            background: '#10b981',
+                            flexShrink: 0,
+                          }}
                         />
                       )}
                     </div>
@@ -145,22 +252,68 @@ export const MunicipalCharts: React.FC<MunicipalChartsProps> = ({
                 );
               })}
             </div>
-            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1.5 px-1">
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                flexWrap: 'wrap',
+                fontSize: 11,
+                color: 'var(--text-dim)',
+                marginTop: 10,
+                padding: '0 2px',
+              }}
+            >
               <span>{formatShortDate(visibleEvolution[0].date)}</span>
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-sky-400" />
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#38bdf8',
+                      display: 'inline-block',
+                    }}
+                  />
                   Attente
                 </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#f59e0b',
+                      display: 'inline-block',
+                    }}
+                  />
                   En cours
                 </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#10b981',
+                      display: 'inline-block',
+                    }}
+                  />
                   Résolus
                 </span>
               </div>
+
               <span>
                 {formatShortDate(visibleEvolution[visibleEvolution.length - 1].date)}
               </span>
@@ -170,27 +323,35 @@ export const MunicipalCharts: React.FC<MunicipalChartsProps> = ({
       </div>
 
       {/* 2. Répartition par Catégorie */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 flex flex-col justify-between">
-        <div className="mb-3">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-amber-400" />
-            Répartition par Catégorie
+      <div style={CARD_STYLE}>
+        <div style={{ marginBottom: 14 }}>
+          <h3
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: 'var(--text-main)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              margin: 0,
+            }}
+          >
+            <BarChart3 size={16} color="#f59e0b" />
+            <span>Répartition par Catégorie</span>
           </h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '3px 0 0' }}>
             Cliquez sur une barre pour filtrer la file et la carte
           </p>
         </div>
 
         {parCategorieEntries.length === 0 ? (
-          <div className="h-36 flex items-center justify-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
-            Aucune catégorie trouvée
-          </div>
+          <div style={EMPTY_STATE_STYLE}>Aucune catégorie trouvée</div>
         ) : (
-          <div className="space-y-2.5">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {parCategorieEntries.map(([catKey, count]) => {
               const meta = CATEGORIE_META[catKey] ?? {
                 label: catKey,
-                color: 'bg-slate-500',
+                color: '#64748b',
               };
               const pct = Math.round((count / totalCategorie) * 100);
               const isSelected = activeCategorie === catKey;
@@ -199,25 +360,64 @@ export const MunicipalCharts: React.FC<MunicipalChartsProps> = ({
                 <button
                   key={catKey}
                   type="button"
+                  className="municipal-cat-btn"
                   onClick={() =>
                     onSelectCategorie?.(isSelected ? 'TOUS' : catKey)
                   }
-                  className={`w-full text-left rounded-lg px-2 py-1 transition-colors ${
-                    isSelected
-                      ? 'bg-sky-500/15 ring-1 ring-sky-500/40'
-                      : 'hover:bg-slate-800/70'
-                  }`}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                    cursor: 'pointer',
+                    background: isSelected
+                      ? 'rgba(56, 189, 248, 0.14)'
+                      : 'rgba(11, 17, 30, 0.35)',
+                    border: isSelected
+                      ? '1px solid rgba(56, 189, 248, 0.45)'
+                      : '1px solid transparent',
+                    transition: 'background-color 0.15s ease',
+                  }}
                 >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-slate-200 font-medium">{meta.label}</span>
-                    <span className="text-slate-400 tabular-nums">
-                      <strong className="text-white">{count}</strong> ({pct}%)
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: 12,
+                      marginBottom: 5,
+                    }}
+                  >
+                    <span style={{ color: '#e2e8f0', fontWeight: 500 }}>
+                      {meta.label}
+                    </span>
+                    <span
+                      style={{
+                        color: 'var(--text-muted)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      <strong style={{ color: 'var(--text-main)' }}>{count}</strong> ({pct}%)
                     </span>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    style={{
+                      height: 8,
+                      width: '100%',
+                      borderRadius: 999,
+                      background: 'var(--bg-dark)',
+                      border: '1px solid var(--border-color)',
+                      overflow: 'hidden',
+                    }}
+                  >
                     <div
-                      style={{ width: `${Math.max(4, pct)}%` }}
-                      className={`h-full rounded-full ${meta.color} transition-all duration-300`}
+                      style={{
+                        width: `${Math.max(4, pct)}%`,
+                        height: '100%',
+                        borderRadius: 999,
+                        background: meta.color,
+                        transition: 'width 0.3s ease',
+                      }}
                     />
                   </div>
                 </button>
@@ -228,21 +428,52 @@ export const MunicipalCharts: React.FC<MunicipalChartsProps> = ({
       </div>
 
       {/* 3. Gravité & Taux de Résolution */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 flex flex-col justify-between">
-        <div className="mb-3">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Gauge className="w-4 h-4 text-emerald-400" />
-            Gravité & Taux de Résolution
+      <div style={CARD_STYLE}>
+        <div style={{ marginBottom: 14 }}>
+          <h3
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: 'var(--text-main)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              margin: 0,
+            }}
+          >
+            <Gauge size={16} color="#10b981" />
+            <span>Gravité &amp; Taux de Résolution</span>
           </h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '3px 0 0' }}>
             Performance municipale sur les critères actifs
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 18,
+          }}
+        >
           {/* Jauge SVG circulaire */}
-          <div className="relative flex-shrink-0 w-24 h-24 flex items-center justify-center">
-            <svg className="w-24 h-24 -rotate-90" viewBox="0 0 88 88">
+          <div
+            style={{
+              position: 'relative',
+              flexShrink: 0,
+              width: 96,
+              height: 96,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <svg
+              width={96}
+              height={96}
+              viewBox="0 0 88 88"
+              style={{ transform: 'rotate(-90deg)' }}
+            >
               <circle
                 cx="44"
                 cy="44"
@@ -263,19 +494,53 @@ export const MunicipalCharts: React.FC<MunicipalChartsProps> = ({
                 strokeDashoffset={dashOffset}
               />
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-base font-bold text-white tabular-nums">
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 17,
+                  fontWeight: 800,
+                  color: 'var(--text-main)',
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1.1,
+                }}
+              >
                 {Math.round(tauxResolution)}%
               </span>
-              <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
-                <CheckCircle2 className="w-2.5 h-2.5" />
+              <span
+                style={{
+                  fontSize: 10.5,
+                  color: '#34d399',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  marginTop: 2,
+                }}
+              >
+                <CheckCircle2 size={10} />
                 Résolus
               </span>
             </div>
           </div>
 
           {/* Barres gravité */}
-          <div className="flex-1 space-y-2">
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 9,
+              minWidth: 0,
+            }}
+          >
             {GRAVITE_ORDER.map(({ key, label, color }) => {
               const count = stats?.par_gravite?.[key] ?? 0;
               const pct =
@@ -284,16 +549,43 @@ export const MunicipalCharts: React.FC<MunicipalChartsProps> = ({
                   : 0;
               return (
                 <div key={key}>
-                  <div className="flex items-center justify-between text-[11px] mb-0.5">
-                    <span className="text-slate-300">{label}</span>
-                    <span className="text-slate-400 tabular-nums">
-                      <strong className="text-white">{count}</strong> ({pct}%)
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: 11.5,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <span style={{ color: '#cbd5e1' }}>{label}</span>
+                    <span
+                      style={{
+                        color: 'var(--text-muted)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      <strong style={{ color: 'var(--text-main)' }}>{count}</strong> ({pct}%)
                     </span>
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    style={{
+                      height: 6,
+                      width: '100%',
+                      borderRadius: 999,
+                      background: 'var(--bg-dark)',
+                      border: '1px solid var(--border-color)',
+                      overflow: 'hidden',
+                    }}
+                  >
                     <div
-                      style={{ width: `${count > 0 ? Math.max(5, pct) : 0}%` }}
-                      className={`h-full rounded-full ${color}`}
+                      style={{
+                        width: `${count > 0 ? Math.max(5, pct) : 0}%`,
+                        height: '100%',
+                        borderRadius: 999,
+                        background: color,
+                        transition: 'width 0.3s ease',
+                      }}
                     />
                   </div>
                 </div>
@@ -302,16 +594,29 @@ export const MunicipalCharts: React.FC<MunicipalChartsProps> = ({
           </div>
         </div>
 
-        <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+        <div
+          style={{
+            marginTop: 14,
+            paddingTop: 10,
+            borderTop: '1px solid var(--border-color)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 8,
+            fontSize: 11.5,
+            color: 'var(--text-muted)',
+          }}
+        >
           <span>
             Chantiers voirie actifs :{' '}
-            <strong className="text-amber-300">
+            <strong style={{ color: '#fcd34d' }}>
               {stats?.details_chantiers?.voirie_active ?? 0}
             </strong>
           </span>
           <span>
             Zones critiques :{' '}
-            <strong className="text-rose-300">
+            <strong style={{ color: '#fda4af' }}>
               {
                 (stats?.zones_haute_densite ?? []).filter(
                   (z) => z.nb_critiques_eleves > 0

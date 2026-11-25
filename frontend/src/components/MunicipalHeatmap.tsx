@@ -70,6 +70,29 @@ function buildThermalPalette(): Uint8ClampedArray {
   return ctx.getImageData(0, 0, 256, 1).data;
 }
 
+function getToolbarButtonStyle(
+  active: boolean,
+  activeColor: string,
+  activeBg: string,
+  activeBorder: string,
+  disabled = false
+): React.CSSProperties {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 11px',
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 600,
+    border: `1px solid ${active ? activeBorder : 'var(--border-light)'}`,
+    background: active ? activeBg : 'var(--bg-dark)',
+    color: active ? activeColor : 'var(--text-muted)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.45 : 1,
+  };
+}
+
 export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
   heatmapPoints,
   zonesHauteDensite,
@@ -487,14 +510,48 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
   const activeAnomaliesCount = anomalies.filter((a) => a.statut === 'ACTIVE').length;
 
   return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden mb-6">
-      <div className="px-4 py-3 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+    <section
+      style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 12,
+        overflow: 'hidden',
+        marginBottom: 20,
+      }}
+    >
+      <div
+        style={{
+          padding: '14px 18px',
+          borderBottom: '1px solid var(--border-color)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
         <div>
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Flame className="w-4 h-4 text-amber-400" />
-            Carte de Chaleur & Corrélation Urbaine (Grand Tunis)
+          <h3
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: 'var(--text-main)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              margin: 0,
+            }}
+          >
+            <Flame size={16} color="#f59e0b" />
+            <span>Carte de Chaleur &amp; Corrélation Urbaine (Grand Tunis)</span>
           </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--text-muted)',
+              margin: '4px 0 0',
+            }}
+          >
             {heatmapPoints.length} points pondérés · {zonesHauteDensite.length} zone(s) dense(s)
             {activeAnomaliesCount > 0
               ? ` · ${activeAnomaliesCount} épicentre(s) anomalie IA`
@@ -502,48 +559,62 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
           <button
             type="button"
+            className="municipal-heatmap-toolbar-btn"
             onClick={() => setShowHeatmap((v) => !v)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors ${
-              showHeatmap
-                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-            }`}
+            style={getToolbarButtonStyle(
+              showHeatmap,
+              '#fcd34d',
+              'rgba(245, 158, 11, 0.18)',
+              'rgba(245, 158, 11, 0.42)'
+            )}
           >
-            <Flame className="w-3.5 h-3.5" />
-            Heatmap
+            <Flame size={14} />
+            <span>Heatmap</span>
           </button>
 
           <button
             type="button"
+            className="municipal-heatmap-toolbar-btn"
             onClick={() => setShowClusters((v) => !v)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors ${
-              showClusters
-                ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-            }`}
+            style={getToolbarButtonStyle(
+              showClusters,
+              '#7dd3fc',
+              'rgba(56, 189, 248, 0.18)',
+              'rgba(56, 189, 248, 0.42)'
+            )}
           >
-            <Layers className="w-3.5 h-3.5" />
-            Clusters ({zonesHauteDensite.length})
+            <Layers size={14} />
+            <span>Clusters ({zonesHauteDensite.length})</span>
           </button>
 
           <button
             type="button"
+            className="municipal-heatmap-toolbar-btn"
             onClick={() => setShowMarkers((v) => !v)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors ${
-              showMarkers
-                ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-            }`}
+            style={getToolbarButtonStyle(
+              showMarkers,
+              '#a5b4fc',
+              'rgba(99, 102, 241, 0.2)',
+              'rgba(99, 102, 241, 0.45)'
+            )}
           >
-            <MapPin className="w-3.5 h-3.5" />
-            Points ({signalements.length})
+            <MapPin size={14} />
+            <span>Points ({signalements.length})</span>
           </button>
 
           <button
             type="button"
+            className="municipal-heatmap-toolbar-btn"
             onClick={() => setShowTraffic((v) => !v)}
             disabled={trafficSegments.length === 0}
             title={
@@ -551,46 +622,102 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
                 ? 'Simulateur trafic (port 8001) indisponible'
                 : 'Afficher les axes congestionnés (Module Trafic)'
             }
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
-              showTraffic
-                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-            }`}
+            style={getToolbarButtonStyle(
+              showTraffic,
+              '#6ee7b7',
+              'rgba(16, 185, 129, 0.18)',
+              'rgba(16, 185, 129, 0.42)',
+              trafficSegments.length === 0
+            )}
           >
-            <Route className="w-3.5 h-3.5" />
-            Trafic Live ({trafficSegments.length})
+            <Route size={14} />
+            <span>Trafic Live ({trafficSegments.length})</span>
           </button>
 
           <button
             type="button"
+            className="municipal-heatmap-toolbar-btn"
             onClick={() => setShowRiskMap((v) => !v)}
             disabled={riskZones.length === 0}
             title="Afficher les zones de risque routier IA (Protection Civile)"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
-              showRiskMap
-                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-            }`}
+            style={getToolbarButtonStyle(
+              showRiskMap,
+              '#fda4af',
+              'rgba(244, 63, 94, 0.18)',
+              'rgba(244, 63, 94, 0.42)',
+              riskZones.length === 0
+            )}
           >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            Risk Map IA ({riskZones.length})
+            <ShieldAlert size={14} />
+            <span>Risk Map IA ({riskZones.length})</span>
           </button>
         </div>
       </div>
 
-      <div className="relative h-[380px] w-full bg-slate-950">
-        <div ref={containerRef} className="h-full w-full z-0" />
+      <div
+        style={{
+          position: 'relative',
+          height: 390,
+          width: '100%',
+          background: 'var(--bg-darker)',
+        }}
+      >
+        <div
+          ref={containerRef}
+          style={{ height: '100%', width: '100%', zIndex: 0 }}
+        />
 
         {/* Légende compacte flottante */}
-        <div className="pointer-events-none absolute bottom-3 left-3 z-[450] flex flex-wrap items-center gap-3 rounded-lg border border-slate-700/80 bg-slate-950/90 px-3 py-2 text-[11px] text-slate-300 backdrop-blur">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-12 rounded-full bg-gradient-to-r from-sky-400 via-emerald-400 via-amber-400 to-red-500" />
-            Densité faible → critique
+        <div
+          style={{
+            pointerEvents: 'none',
+            position: 'absolute',
+            bottom: 12,
+            left: 12,
+            zIndex: 450,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 12,
+            borderRadius: 8,
+            border: '1px solid var(--border-light)',
+            background: 'rgba(11, 17, 30, 0.92)',
+            backdropFilter: 'blur(8px)',
+            padding: '7px 12px',
+            fontSize: 11.5,
+            color: '#cbd5e1',
+          }}
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <span
+              style={{
+                width: 56,
+                height: 8,
+                borderRadius: 999,
+                display: 'inline-block',
+                background:
+                  'linear-gradient(90deg, #38bdf8, #10b981, #f59e0b, #ef4444)',
+              }}
+            />
+            <span>Densité faible → critique</span>
           </span>
           {activeAnomaliesCount > 0 && (
-            <span className="inline-flex items-center gap-1 text-rose-300">
-              <Sparkles className="w-3 h-3" />
-              Cercle pointillé : anomalie IA (cliquer pour filtrer)
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                color: '#fda4af',
+              }}
+            >
+              <Sparkles size={12} />
+              <span>Cercle pointillé : anomalie IA (cliquer pour filtrer)</span>
             </span>
           )}
         </div>

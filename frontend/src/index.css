@@ -233,3 +233,64 @@ body {
   filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
 }
 
+@keyframes spin-linear {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin-linear 0.9s linear infinite;
+}
+
+/* Grilles & Interactions Dashboard Municipal (sans Tailwind CSS) */
+.municipal-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.municipal-anomalies-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+@media (max-width: 1080px) {
+  .municipal-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 780px) {
+  .municipal-anomalies-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.municipal-bar-col:hover .municipal-bar-inner {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.28);
+}
+
+.municipal-cat-btn:hover {
+  background: rgba(56, 189, 248, 0.08) !important;
+}
+
+.municipal-heatmap-toolbar-btn {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.municipal-heatmap-toolbar-btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.municipal-glass-btn {
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.municipal-glass-btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
