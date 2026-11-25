@@ -13,6 +13,9 @@ import {
   Signalement,
   SignalementStatistiques,
   StatutSignalement,
+  AlerteAnomalieItem,
+  AnomaliesListResponse,
+  AnomalieAnalyseResponse,
   UserSession,
   TrafficSegment,
   TrafficSummary,
@@ -31,6 +34,27 @@ export const WS_BASE_URL =
 const AUTH_TOKEN_KEY = 'smartcity_jwt_token';
 const AUTH_USER_KEY = 'smartcity_auth_user';
 const UNIFIED_SESSION_KEY = 'smartcity_unified_session';
+const MY_REPORTS_STORAGE_KEY = 'smartcity_citizen_submitted_ids';
+
+export function getSavedCitizenReportIds(): string[] {
+  try {
+    const raw = localStorage.getItem(MY_REPORTS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCitizenReportId(id: string): void {
+  try {
+    const current = getSavedCitizenReportIds();
+    if (!current.includes(id)) {
+      localStorage.setItem(MY_REPORTS_STORAGE_KEY, JSON.stringify([id, ...current].slice(0, 50)));
+    }
+  } catch {
+    // Ignore storage error
+  }
+}
 
 export function getAuthToken(): string | null {
   try {
@@ -207,14 +231,16 @@ export interface SignalementFilterParams {
   quartier?: string;
   statut?: string;
   categorie?: string;
+  gravite?: string;
+  periode?: string;
+  date_debut?: string;
+  date_fin?: string;
+  mes_signalements?: boolean;
 }
 
-/**
- * Récupère la liste des signalements citoyens avec filtres optionnels
- */
-export async function getSignalements(
+function buildSignalementQueryParams(
   params?: SignalementFilterParams
-): Promise<Signalement[]> {
+): Record<string, string> {
   const cleanParams: Record<string, string> = {};
   if (params?.quartier && params.quartier !== 'TOUS') {
     cleanParams.quartier = params.quartier;
@@ -225,6 +251,31 @@ export async function getSignalements(
   if (params?.categorie && params.categorie !== 'TOUS') {
     cleanParams.categorie = params.categorie;
   }
+  if (params?.gravite && params.gravite !== 'TOUS') {
+    cleanParams.gravite = params.gravite;
+  }
+  if (params?.periode && params.periode !== 'TOUS') {
+    cleanParams.periode = params.periode;
+  }
+  if (params?.date_debut) {
+    cleanParams.date_debut = params.date_debut;
+  }
+  if (params?.date_fin) {
+    cleanParams.date_fin = params.date_fin;
+  }
+  if (params?.mes_signalements) {
+    cleanParams.mes_signalements = 'true';
+  }
+  return cleanParams;
+}
+
+/**
+ * Récupère la liste des signalements citoyens avec filtres optionnels
+ */
+export async function getSignalements(
+  params?: SignalementFilterParams
+): Promise<Signalement[]> {
+  const cleanParams = buildSignalementQueryParams(params);
 
   const response = await apiClient.get<Signalement[]>('signalements/', {
     params: cleanParams,
@@ -280,12 +331,58 @@ export async function updateSignalementStatut(
 }
 
 /**
- * Récupère les statistiques globales et de conformité INPDP
+ * Récupère les statistiques globales, analytiques filtrables et de conformité INPDP
  * (endpoint sécurisé réservé au Responsable Municipal)
  */
-export async function getSignalementStatistiques(): Promise<SignalementStatistiques> {
+export async function getSignalementStatistiques(
+  params?: SignalementFilterParams
+): Promise<SignalementStatistiques> {
+  const cleanParams = buildSignalementQueryParams(params);
   const response = await apiClient.get<SignalementStatistiques>(
-    'signalements/statistiques/'
+    'signalements/statistiques/',
+    { params: cleanParams }
+  );
+  return response.data;
+}
+
+/**
+ * Récupère les alertes d'anomalies détectées par Isolation Forest
+ */
+export async function getAnomalies(
+  statut?: 'ACTIVE' | 'ACQUITTEE' | 'TOUS'
+): Promise<AnomaliesListResponse> {
+  const cleanParams: Record<string, string> = {};
+  if (statut && statut !== 'TOUS') {
+    cleanParams.statut = statut;
+  }
+  const response = await apiClient.get<AnomaliesListResponse>(
+    'signalements/anomalies/',
+    { params: cleanParams }
+  );
+  return response.data;
+}
+
+/**
+ * Déclenche une analyse Isolation Forest sur les fenêtres actives
+ */
+export async function analyserAnomalies(
+  fenetreHeures = 6
+): Promise<AnomalieAnalyseResponse> {
+  const response = await apiClient.post<AnomalieAnalyseResponse>(
+    'signalements/anomalies/analyser/',
+    { fenetre_heures: fenetreHeures }
+  );
+  return response.data;
+}
+
+/**
+ * Acquitte une alerte d'anomalie par le Responsable Municipal
+ */
+export async function acquitterAnomalie(
+  id: number
+): Promise<AlerteAnomalieItem> {
+  const response = await apiClient.post<AlerteAnomalieItem>(
+    `signalements/anomalies/${id}/acquitter/`
   );
   return response.data;
 }

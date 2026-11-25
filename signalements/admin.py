@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Signalement, ProfilUtilisateur
+from .models import AlerteAnomalie, ProfilUtilisateur, Signalement
 
 
 @admin.register(ProfilUtilisateur)
@@ -26,3 +26,20 @@ class SignalementAdmin(admin.ModelAdmin):
     search_fields = ('description', 'adresse_texte', 'quartier', 'ip_emetteur', 'auteur__username')
     readonly_fields = ('id', 'date_creation', 'date_mise_a_jour')
     ordering = ('-date_creation',)
+
+
+@admin.register(AlerteAnomalie)
+class AlerteAnomalieAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'quartier',
+        'categorie',
+        'severite',
+        'score_anomalie',
+        'nb_signalements',
+        'statut',
+        'date_detection',
+    )
+    list_filter = ('statut', 'severite', 'categorie', 'quartier')
+    search_fields = ('quartier', 'categorie', 'explication')
+    ordering = ('-date_detection',)

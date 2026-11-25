@@ -39,6 +39,7 @@ class IsCitoyenOrReadOnly(permissions.BasePermission):
         'destroy',
         'changer_statut',
         'statistiques',
+        'dashboard_analytics',
         'supervision',
     }
 

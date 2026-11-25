@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Signalement, is_responsable_municipal
+from .models import AlerteAnomalie, Signalement, is_responsable_municipal
 
 
 def get_client_ip(request):
@@ -20,11 +20,14 @@ class SignalementSerializer(serializers.ModelSerializer):
     Enregistre automatiquement l'IP émetteur et l'auteur, et protège les champs
     sensibles/calculés (comme le statut) en lecture seule.
     """
+    est_mon_signalement = serializers.SerializerMethodField()
+
     class Meta:
         model = Signalement
         fields = [
             'id',
             'auteur',
+            'est_mon_signalement',
             'categorie',
             'gravite',
             'description',
@@ -44,6 +47,7 @@ class SignalementSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id',
             'auteur',
+            'est_mon_signalement',
             'visages_plaques_floutes',
             'nb_zones_floutees',
             'statut',
@@ -52,6 +56,12 @@ class SignalementSerializer(serializers.ModelSerializer):
             'date_creation',
             'date_mise_a_jour',
         ]
+
+    def get_est_mon_signalement(self, instance):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            return instance.auteur_id == request.user.pk
+        return False
 
     def create(self, validated_data):
         # Récupération automatique de l'IP cliente et de l'auteur authentifié lors de la création
@@ -96,3 +106,33 @@ class SignalementResponsableSerializer(SignalementSerializer):
 class ChangerStatutSerializer(serializers.Serializer):
     """Sérialiseur dédié à la validation du changement de statut par le Responsable Municipal."""
     statut = serializers.ChoiceField(choices=Signalement.Statut.choices)
+
+
+class AlerteAnomalieSerializer(serializers.ModelSerializer):
+    """Sérialiseur pour les alertes d'anomalies spatio-temporelles détectées par Isolation Forest."""
+    acquittee_par_username = serializers.CharField(
+        source='acquittee_par.username',
+        read_only=True,
+        default=None,
+    )
+
+    class Meta:
+        model = AlerteAnomalie
+        fields = [
+            'id',
+            'quartier',
+            'categorie',
+            'severite',
+            'score_anomalie',
+            'decision_raw',
+            'nb_signalements',
+            'fenetre_heures',
+            'latitude_centre',
+            'longitude_centre',
+            'explication',
+            'statut',
+            'date_detection',
+            'date_mise_a_jour',
+            'date_acquittement',
+            'acquittee_par_username',
+        ]

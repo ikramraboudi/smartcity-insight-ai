@@ -2,14 +2,20 @@ import os
 import io
 import shutil
 import tempfile
+from datetime import timedelta
 from PIL import Image, ImageDraw
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import Group, User
 from django.core.cache import cache
+from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework import status
+from .anomaly_detector import evaluer_anomalie_zone, scanner_toutes_anomalies
 from .models import (
+    AlerteAnomalie,
     ProfilUtilisateur,
     Signalement,
     UserRole,
@@ -629,6 +635,340 @@ class SignalementProtectionCivileSyncIntegrationTest(TestCase):
             Signalement.Statut.RESOLU,
             "Le signalement municipal doit être synchronisé vers RESOLU."
         )
+
+
+class SignalementAntiAbuseAndCitizenTrackingTest(TestCase):
+    """
+    Tests unitaires pour le quota différencié (utilisateur authentifié vs IP anonyme),
+    la détection anti-doublon spatio-temporelle (< 50 m, < 10 min),
+    et le suivi citoyen (?mes_signalements=true & est_mon_signalement).
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+        self.citoyen1 = User.objects.create_user(username='citoyen_quota_1', password='Pwd123!')
+        self.citoyen2 = User.objects.create_user(username='citoyen_quota_2', password='Pwd123!')
+
+    def test_anti_duplicate_spatial_temporal_blocks_non_accident(self):
+        """
+        Deux signalements de voirie de même catégorie à < 50 m et < 10 min
+        doivent retourner HTTP 409 Conflict, tandis qu'à > 100 m ils sont acceptés.
+        """
+        payload_base = {
+            'categorie': 'NID_DE_POULE',
+            'gravite': 'MOYENNE',
+            'description': 'Nid-de-poule profond rue de Marseille',
+            'latitude': 36.8050,
+            'longitude': 10.1810,
+            'quartier': 'Centre-Ville Tunis',
+        }
+        res1 = self.client.post('/api/signalements/', payload_base, format='json', REMOTE_ADDR='196.10.20.30')
+        self.assertEqual(res1.status_code, status.HTTP_201_CREATED)
+        first_id = res1.json()['id']
+
+        # Doublon à ~14 mètres (< 50 m) dans les 10 minutes -> 409 Conflict
+        payload_dup = {**payload_base, 'latitude': 36.8051, 'longitude': 10.1811}
+        res_dup = self.client.post('/api/signalements/', payload_dup, format='json', REMOTE_ADDR='196.10.20.30')
+        self.assertEqual(res_dup.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(res_dup.json()['code'], 'DUPLICATE_REPORT')
+        self.assertEqual(res_dup.json()['doublon_id'], first_id)
+
+        # Signalement suffisamment éloigné (~150 m) -> 201 Created
+        payload_far = {**payload_base, 'latitude': 36.8065, 'longitude': 10.1810}
+        res_far = self.client.post('/api/signalements/', payload_far, format='json', REMOTE_ADDR='196.10.20.30')
+        self.assertEqual(res_far.status_code, status.HTTP_201_CREATED)
+
+    def test_differentiated_throttling_and_mes_signalements_filter(self):
+        """
+        Un citoyen authentifié dispose d'un quota propre (15/h) indépendant de l'IP partagée,
+        et peut filtrer ses propres signalements sans exposer l'IP ou l'auteur d'autrui.
+        """
+        shared_ip = '196.200.99.1'
+
+        # 1. citoyen1 crée 6 signalements espacés (> 50 m) depuis la même IP -> tous acceptés (quota 15/h > 5/h)
+        self.client.force_authenticate(user=self.citoyen1)
+        for i in range(6):
+            res = self.client.post(
+                '/api/signalements/',
+                {
+                    'categorie': 'ECLAIRAGE',
+                    'gravite': 'FAIBLE',
+                    'description': f'Lampadaire éteint #{i}',
+                    'latitude': 36.8000 + (i * 0.002),
+                    'longitude': 10.1800,
+                    'quartier': 'Lafayette',
+                },
+                format='json',
+                REMOTE_ADDR=shared_ip,
+            )
+            self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        # 2. citoyen2 crée un signalement sur la même IP -> accepté & isolé
+        self.client.force_authenticate(user=self.citoyen2)
+        res_c2 = self.client.post(
+            '/api/signalements/',
+            {
+                'categorie': 'DECHETS',
+                'gravite': 'MOYENNE',
+                'description': 'Conteneur plein',
+                'latitude': 36.8300,
+                'longitude': 10.1900,
+                'quartier': 'Montplaisir',
+            },
+            format='json',
+            REMOTE_ADDR=shared_ip,
+        )
+        self.assertEqual(res_c2.status_code, status.HTTP_201_CREATED)
+
+        # 3. Vérification du suivi citoyen (?mes_signalements=true & est_mon_signalement)
+        res_mine = self.client.get('/api/signalements/?mes_signalements=true')
+        self.assertEqual(res_mine.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_mine.json()), 1)
+        self.assertTrue(res_mine.json()[0]['est_mon_signalement'])
+        self.assertNotIn('ip_emetteur', res_mine.json()[0])
+
+        res_all = self.client.get('/api/signalements/')
+        self.assertEqual(res_all.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_all.json()), 7)
+        mine_flags = [item['est_mon_signalement'] for item in res_all.json()]
+        self.assertEqual(mine_flags.count(True), 1)
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
+class DashboardAnalyticsFilterAndAggregationTest(TestCase):
+    """
+    Tests d'intégration Phase 2 : filtrage multi-critères cohérent sur /signalements/,
+    /statistiques/ et /dashboard-analytics/, heatmap pondérée et séries temporelles.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.responsable = User.objects.create_user(
+            username='resp_phase2', password='Pwd!123456', email='resp2@tunis.tn'
+        )
+        self.responsable.profil.role = UserRole.RESPONSABLE_MUNICIPAL
+        self.responsable.profil.save()
+        self.citoyen = User.objects.create_user(
+            username='cit_phase2', password='Pwd!123456', email='cit2@tunis.tn'
+        )
+
+        # Jeu de données varié en statuts, gravités, catégories, quartiers et dates
+        self.s1 = Signalement.objects.create(
+            categorie=Signalement.Categorie.NID_DE_POULE,
+            gravite=Signalement.Gravite.CRITIQUE,
+            statut=Signalement.Statut.EN_COURS,
+            description='Chaussée affaissée Avenue Bourguiba',
+            latitude=36.8002,
+            longitude=10.1815,
+            quartier='Centre-Ville Tunis',
+        )
+        self.s2 = Signalement.objects.create(
+            categorie=Signalement.Categorie.NID_DE_POULE,
+            gravite=Signalement.Gravite.ELEVEE,
+            statut=Signalement.Statut.CONFIRME,
+            description='Trou profond rue de Marseille',
+            latitude=36.8010,
+            longitude=10.1822,
+            quartier='Centre-Ville Tunis',
+        )
+        self.s3 = Signalement.objects.create(
+            categorie=Signalement.Categorie.ECLAIRAGE,
+            gravite=Signalement.Gravite.FAIBLE,
+            statut=Signalement.Statut.RESOLU,
+            description='Ampoule grillée Ariana',
+            latitude=36.8625,
+            longitude=10.1955,
+            quartier='Ariana Centre',
+        )
+        # Signalement ancien (> 12 jours) pour tester le filtre période 7j
+        old_sig = Signalement.objects.create(
+            categorie=Signalement.Categorie.DECHETS,
+            gravite=Signalement.Gravite.CRITIQUE,
+            statut=Signalement.Statut.EN_ATTENTE,
+            description='Dépôt sauvage ancien Ariana',
+            latitude=36.8630,
+            longitude=10.1960,
+            quartier='Ariana Centre',
+        )
+        Signalement.objects.filter(pk=old_sig.pk).update(
+            date_creation=timezone.now() - timedelta(days=12)
+        )
+
+    def test_statistiques_aggregations_and_rbac(self):
+        # Citoyen interdit sur dashboard-analytics
+        self.client.force_authenticate(user=self.citoyen)
+        res_forbidden = self.client.get('/api/signalements/dashboard-analytics/')
+        self.assertEqual(res_forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Responsable obtient KPIs, zones haute densité, heatmap et évolution en peu de requêtes
+        self.client.force_authenticate(user=self.responsable)
+        with CaptureQueriesContext(connection) as queries:
+            res = self.client.get('/api/signalements/dashboard-analytics/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertLessEqual(len(queries), 6)
+        data = res.json()
+
+        self.assertEqual(data['total_signalements'], 4)
+        self.assertEqual(data['chantiers_actifs'], 2)  # s1 EN_COURS + s2 CONFIRME
+        self.assertEqual(data['incidents_en_attente'], 1)
+        self.assertEqual(data['details_chantiers']['voirie_active'], 2)
+        self.assertGreaterEqual(len(data['heatmap_points']), 4)
+        self.assertEqual(len(data['heatmap_points'][0]), 3)  # [lat, lng, intensite]
+        self.assertTrue(len(data['zones_haute_densite']) >= 1)
+        self.assertTrue(len(data['evolution_temporelle']) >= 1)
+
+    def test_filters_gravite_periode_and_quartier_sync(self):
+        self.client.force_authenticate(user=self.responsable)
+
+        # Filtre periode=7j doit exclure le signalement âgé de 12 jours
+        res_7j_stats = self.client.get('/api/signalements/statistiques/?periode=7j')
+        res_7j_list = self.client.get('/api/signalements/?periode=7j')
+        self.assertEqual(res_7j_stats.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_7j_stats.json()['total_signalements'], 3)
+        self.assertEqual(len(res_7j_list.json()), 3)
+
+        # Filtre combiné gravite=CRITIQUE + periode=7j -> uniquement s1
+        res_crit = self.client.get(
+            '/api/signalements/statistiques/?periode=7j&gravite=CRITIQUE'
+        )
+        self.assertEqual(res_crit.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_crit.json()['total_signalements'], 1)
+        self.assertEqual(res_crit.json()['chantiers_actifs'], 1)
+
+        # Filtre par quartier
+        res_ariana = self.client.get(
+            '/api/signalements/statistiques/?quartier=Ariana%20Centre'
+        )
+        self.assertEqual(res_ariana.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_ariana.json()['total_signalements'], 2)
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
+class IsolationForestAnomalyDetectionTest(TestCase):
+    """
+    Tests ML Phase 3 (IsolationForest) :
+    - Aucun faux positif sur un incident isolé ou espacé.
+    - Détection réelle d'une accumulation soudaine + déduplication.
+    - RBAC et acquittement des anomalies via API.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.responsable = User.objects.create_user(
+            username='resp_ml', password='Pwd!123456', email='resp_ml@tunis.tn'
+        )
+        self.responsable.profil.role = UserRole.RESPONSABLE_MUNICIPAL
+        self.responsable.profil.save()
+        self.citoyen = User.objects.create_user(
+            username='cit_ml', password='Pwd!123456', email='cit_ml@tunis.tn'
+        )
+
+    def test_no_false_positive_on_isolated_or_sparse_reports(self):
+        # 1. Incident isolé à El Manar (< 3)
+        Signalement.objects.create(
+            categorie=Signalement.Categorie.ECLAIRAGE,
+            gravite=Signalement.Gravite.FAIBLE,
+            description='Un lampadaire isolé en panne',
+            latitude=36.8350,
+            longitude=10.1550,
+            quartier='El Manar',
+        )
+        res_single = evaluer_anomalie_zone('El Manar', Signalement.Categorie.ECLAIRAGE)
+        self.assertIsNone(res_single)
+
+        # 2. Deux signalements faibles dispersés à Le Bardo (~1.5 km)
+        Signalement.objects.create(
+            categorie=Signalement.Categorie.DECHETS,
+            gravite=Signalement.Gravite.FAIBLE,
+            description='Bac débordant nord',
+            latitude=36.8090,
+            longitude=10.1300,
+            quartier='Le Bardo',
+        )
+        Signalement.objects.create(
+            categorie=Signalement.Categorie.DECHETS,
+            gravite=Signalement.Gravite.FAIBLE,
+            description='Bac débordant sud',
+            latitude=36.8225,
+            longitude=10.1300,
+            quartier='Le Bardo',
+        )
+        res_sparse = evaluer_anomalie_zone('Le Bardo', Signalement.Categorie.DECHETS)
+        self.assertIsNone(res_sparse)
+        self.assertEqual(AlerteAnomalie.objects.count(), 0)
+
+    def test_burst_triggers_anomaly_deduplication_and_acknowledgment_api(self):
+        # 5 signalements rapprochés et graves dans Lafayette -> pic anormal
+        for idx in range(5):
+            Signalement.objects.create(
+                categorie=Signalement.Categorie.NID_DE_POULE,
+                gravite=Signalement.Gravite.CRITIQUE if idx < 3 else Signalement.Gravite.ELEVEE,
+                description=f'Effondrement chaussée burst #{idx}',
+                latitude=36.8130 + (idx * 0.0002),
+                longitude=10.1780 + (idx * 0.0002),
+                quartier='Lafayette',
+            )
+
+        active_alerts = AlerteAnomalie.objects.filter(
+            quartier='Lafayette',
+            categorie=Signalement.Categorie.NID_DE_POULE,
+            statut=AlerteAnomalie.Statut.ACTIVE,
+        )
+        self.assertEqual(active_alerts.count(), 1)
+        alerte = active_alerts.first()
+        self.assertEqual(alerte.nb_signalements, 5)
+        self.assertGreater(alerte.score_anomalie, 50.0)
+
+        # Un 6e signalement met à jour l'alerte existante sans la dupliquer
+        Signalement.objects.create(
+            categorie=Signalement.Categorie.NID_DE_POULE,
+            gravite=Signalement.Gravite.CRITIQUE,
+            description='Effondrement chaussée burst #6',
+            latitude=36.8134,
+            longitude=10.1784,
+            quartier='Lafayette',
+        )
+        self.assertEqual(active_alerts.count(), 1)
+        alerte.refresh_from_db()
+        self.assertEqual(alerte.nb_signalements, 6)
+
+        # RBAC Citoyen bloqué (403)
+        self.client.force_authenticate(user=self.citoyen)
+        self.assertEqual(
+            self.client.get('/api/signalements/anomalies/').status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.post('/api/signalements/anomalies/analyser/').status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.post(
+                f'/api/signalements/anomalies/{alerte.id}/acquitter/'
+            ).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        # Responsable liste, scanne et acquitte l'anomalie
+        self.client.force_authenticate(user=self.responsable)
+        res_list = self.client.get('/api/signalements/anomalies/')
+        self.assertEqual(res_list.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(res_list.json()['total_actives'], 1)
+
+        detectees = scanner_toutes_anomalies(fenetre_heures=6)
+        self.assertTrue(any(d['quartier'] == 'Lafayette' for d in detectees))
+
+        res_ack = self.client.post(
+            f'/api/signalements/anomalies/{alerte.id}/acquitter/'
+        )
+        self.assertEqual(res_ack.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_ack.json()['statut'], 'ACQUITTEE')
+        self.assertEqual(res_ack.json()['acquittee_par_username'], 'resp_ml')
+
+
 
 
 

@@ -146,6 +146,7 @@ export interface Signalement {
   nb_zones_floutees: number;
   statut: StatutSignalement;
   alerte_liee?: number | null;
+  est_mon_signalement?: boolean;
   ip_emetteur?: string | null;
   date_creation: string;
   date_mise_a_jour?: string;
@@ -194,6 +195,25 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+export interface ZoneHauteDensite {
+  zone: string;
+  latitude: number;
+  longitude: number;
+  nb_signalements: number;
+  nb_actifs: number;
+  nb_critiques_eleves: number;
+  score_densite: number;
+  categorie_dominante: string;
+}
+
+export interface EvolutionTemporellePoint {
+  date: string;
+  total: number;
+  en_attente: number;
+  en_cours: number;
+  resolus: number;
+}
+
 export interface SignalementStatistiques {
   total_signalements: number;
   par_statut: Record<string, number>;
@@ -205,6 +225,51 @@ export interface SignalementStatistiques {
     total_zones_floutees: number;
   };
   taux_resolution_pourcent: number;
+  chantiers_actifs?: number;
+  incidents_en_attente?: number;
+  details_chantiers?: {
+    en_cours: number;
+    confirmes: number;
+    voirie_active: number;
+  };
+  zones_haute_densite?: ZoneHauteDensite[];
+  heatmap_points?: [number, number, number][];
+  evolution_temporelle?: EvolutionTemporellePoint[];
+  anomalies_actives_count?: number;
+}
+
+export type StatutAnomalie = 'ACTIVE' | 'ACQUITTEE';
+export type SeveriteAnomalie = 'MODERE' | 'ELEVEE' | 'CRITIQUE';
+
+export interface AlerteAnomalieItem {
+  id: number;
+  statut: StatutAnomalie;
+  severite: SeveriteAnomalie;
+  quartier: string;
+  categorie: string;
+  score_anomalie: number;
+  decision_raw: number;
+  nb_signalements: number;
+  fenetre_heures: number;
+  latitude_centre: number | null;
+  longitude_centre: number | null;
+  explication: string;
+  date_detection: string;
+  date_mise_a_jour: string;
+  date_acquittement: string | null;
+  acquittee_par_username: string | null;
+}
+
+export interface AnomaliesListResponse {
+  modele: string;
+  total_actives: number;
+  anomalies: AlerteAnomalieItem[];
+}
+
+export interface AnomalieAnalyseResponse {
+  message: string;
+  nb_detectees: number;
+  anomalies: AlerteAnomalieItem[];
 }
 
 // =============================================================================

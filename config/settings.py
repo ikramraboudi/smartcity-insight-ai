@@ -175,7 +175,9 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '5/hour',
+        'user': '15/hour',
         'signalements_create': '5/hour',
+        'signalements_create_user': '15/hour',
     }
 }
 

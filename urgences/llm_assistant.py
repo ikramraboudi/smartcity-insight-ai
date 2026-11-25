@@ -113,6 +113,7 @@ def generer_reponse_deterministe_ancrage(question: str, contexte: dict) -> str:
     risk = contexte["risk_map"]
     rouges = risk["zones_rouges_critiques"]
     oranges = risk["zones_oranges_moderees"]
+    vertes = risk.get("zones_vertes_sures", [])
     alertes = contexte["alertes_actives"]
 
     # 1. Questions sur les zones rouges / prioritaires
@@ -123,6 +124,10 @@ def generer_reponse_deterministe_ancrage(question: str, contexte: dict) -> str:
                 rep += "**Zones orange sous vigilance active :**\n"
                 for z in oranges:
                     rep += f"- **{z['nom']}** : Score de {z['score']} ({', '.join(z['facteurs'])})\n"
+            elif vertes:
+                rep += "**Principaux secteurs sous surveillance (Vert) :**\n"
+                for z in vertes[:3]:
+                    rep += f"- **{z['nom']}** : Score de {z['score']}\n"
             return rep
 
         rep = "### 🚨 Zones Rouges Prioritaires (Risque ≥ 70 %)\n\n"

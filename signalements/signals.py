@@ -46,6 +46,9 @@ def synchroniser_signalement_vers_protection_civile(sender, instance: Signalemen
     # Cas 1 : Création d'un nouveau signalement nécessitant les secours d'urgence
     # --------------------------------------------------------------------------
     if created:
+        if instance.statut == Signalement.Statut.REJETE_SPAM:
+            return
+
         est_urgence = (
             instance.categorie == Signalement.Categorie.ACCIDENT
             or instance.gravite in (Signalement.Gravite.CRITIQUE, Signalement.Gravite.ELEVEE)
@@ -99,6 +102,22 @@ def synchroniser_signalement_vers_protection_civile(sender, instance: Signalemen
 
             except Exception as e:
                 logger.error(f"[SYNCHRO ERROR] Échec création alerte pour signalement {instance.id}: {e}", exc_info=True)
+
+        # Analyse ML non supervisée (Isolation Forest) pour détecter un pic anormal sur la zone
+        try:
+            from .anomaly_detector import evaluer_anomalie_zone
+            anomalie = evaluer_anomalie_zone(
+                quartier=instance.quartier,
+                categorie=instance.categorie,
+                persist=True,
+            )
+            if anomalie:
+                logger.info(
+                    f"[ANOMALIE IA] Sursaut détecté ({anomalie['score_anomalie']}%) : "
+                    f"{anomalie['categorie']} @ {anomalie['quartier']}"
+                )
+        except Exception as ml_err:
+            logger.warning(f"[ANOMALIE IA] Détection non bloquante ignorée : {ml_err}")
 
     # --------------------------------------------------------------------------
     # Cas 2 : Modification du statut municipal (Municipal ➔ Protection Civile)

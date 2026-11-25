@@ -4,7 +4,6 @@ import {
   Activity,
   AlertTriangle,
   ArrowUpDown,
-  BarChart3,
   CheckCircle2,
   Clock,
   Filter,
@@ -19,6 +18,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   TrendingUp,
   UserCheck,
   X,
@@ -26,8 +26,13 @@ import {
 } from 'lucide-react';
 import {
   BACKEND_URL,
+  acquitterAnomalie,
+  analyserAnomalies,
   changerStatutSignalement,
   fetchCurrentUser,
+  fetchTrafficSegments,
+  fetchZonesRiskMap,
+  getAnomalies,
   getAuthToken,
   getSignalements,
   getSignalementStatistiques,
@@ -35,14 +40,19 @@ import {
   logoutMunicipal,
 } from '../services/api';
 import {
+  AlerteAnomalieItem,
   AuthUser,
   CategorieSignalement,
   GraviteSignalement,
   Signalement,
   SignalementStatistiques,
   StatutSignalement,
+  TrafficSegment,
+  ZoneRiskMap,
 } from '../types';
 import { MunicipalLogin } from './MunicipalLogin';
+import { MunicipalCharts } from './MunicipalCharts';
+import { MunicipalHeatmap } from './MunicipalHeatmap';
 
 const QUARTIERS_LIST = [
   'TOUS',
@@ -141,7 +151,10 @@ const CATEGORIE_META: Record<
   },
 };
 
-function computeInterventionPriority(s: Signalement) {
+function computeInterventionPriority(
+  s: Signalement,
+  trafficZoneCongestion?: Map<string, number>
+) {
   const gravWeight = GRAVITE_CONFIG[s.gravite]?.weight ?? 10;
   const catMeta = CATEGORIE_META[s.categorie] ?? CATEGORIE_META.AUTRE;
 
@@ -155,9 +168,26 @@ function computeInterventionPriority(s: Signalement) {
     };
   }
 
+  let trafficBoost = 0;
+  let mobilitySuffix = '';
+  if (trafficZoneCongestion && trafficZoneCongestion.size > 0 && s.quartier) {
+    const qLower = s.quartier.toLowerCase();
+    let maxIdx = 0;
+    trafficZoneCongestion.forEach((idx, zoneName) => {
+      const zLower = zoneName.toLowerCase();
+      if (qLower.includes(zLower) || zLower.includes(qLower)) {
+        if (idx > maxIdx) maxIdx = idx;
+      }
+    });
+    if (maxIdx >= 0.65) {
+      trafficBoost = 12;
+      mobilitySuffix = ` · Trafic dense (${Math.round(maxIdx * 100)}%)`;
+    }
+  }
+
   const statutBoost =
     s.statut === 'EN_ATTENTE' ? 20 : s.statut === 'CONFIRME' ? 15 : 10;
-  const score = gravWeight + catMeta.mobilityWeight + statutBoost;
+  const score = gravWeight + catMeta.mobilityWeight + statutBoost + trafficBoost;
 
   if (score >= 75) {
     return {
@@ -165,7 +195,7 @@ function computeInterventionPriority(s: Signalement) {
       badge: 'P1 — URGENCE MOBILITÉ',
       badgeColor: '#ef4444',
       badgeBg: 'rgba(239, 68, 68, 0.18)',
-      mobilityLabel: catMeta.mobilityLabel,
+      mobilityLabel: `${catMeta.mobilityLabel}${mobilitySuffix}`,
     };
   }
   if (score >= 55) {
@@ -174,7 +204,7 @@ function computeInterventionPriority(s: Signalement) {
       badge: 'P2 — PRIORITÉ ÉLEVÉE',
       badgeColor: '#f97316',
       badgeBg: 'rgba(249, 115, 22, 0.18)',
-      mobilityLabel: catMeta.mobilityLabel,
+      mobilityLabel: `${catMeta.mobilityLabel}${mobilitySuffix}`,
     };
   }
   return {
@@ -182,7 +212,7 @@ function computeInterventionPriority(s: Signalement) {
     badge: 'P3 — STANDARD',
     badgeColor: '#38bdf8',
     badgeBg: 'rgba(56, 189, 248, 0.15)',
-    mobilityLabel: catMeta.mobilityLabel,
+    mobilityLabel: `${catMeta.mobilityLabel}${mobilitySuffix}`,
   };
 }
 
@@ -205,8 +235,20 @@ export const MunicipalDashboard: React.FC = () => {
   const [selectedQuartier, setSelectedQuartier] = useState('TOUS');
   const [selectedStatut, setSelectedStatut] = useState<string>('TOUS');
   const [selectedCategorie, setSelectedCategorie] = useState<string>('TOUS');
+  const [selectedGravite, setSelectedGravite] = useState<string>('TOUS');
+  const [selectedPeriode, setSelectedPeriode] = useState<string>('TOUS');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<'PRIORITY' | 'RECENT'>('PRIORITY');
+
+  // Anomalies IA (Isolation Forest) & Couches croisées (Trafic + Risk Map)
+  const [anomalies, setAnomalies] = useState<AlerteAnomalieItem[]>([]);
+  const [anomaliesModelName, setAnomaliesModelName] = useState<string>(
+    'IsolationForest'
+  );
+  const [isScanningAnomalies, setIsScanningAnomalies] = useState(false);
+  const [acknowledgingId, setAcknowledgingId] = useState<number | null>(null);
+  const [trafficSegments, setTrafficSegments] = useState<TrafficSegment[]>([]);
+  const [riskZones, setRiskZones] = useState<ZoneRiskMap[]>([]);
 
   const [modalImage, setModalImage] = useState<{
     url: string;
@@ -214,51 +256,91 @@ export const MunicipalDashboard: React.FC = () => {
     title: string;
   } | null>(null);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     logoutMunicipal();
     setCurrentUser(null);
     setAccessDeniedError(null);
     setGlobalStats(null);
     setSignalements([]);
-  };
+    setAnomalies([]);
+  }, []);
 
-  // Chargement conjoint des statistiques sécurisées (/statistiques/) et des signalements
-  const loadDashboardData = useCallback(async () => {
-    if (!getAuthToken()) return;
-    setIsLoading(true);
-    setActionError(null);
+  const activeFilters = useMemo(
+    () => ({
+      quartier: selectedQuartier !== 'TOUS' ? selectedQuartier : undefined,
+      statut: selectedStatut !== 'TOUS' ? selectedStatut : undefined,
+      categorie: selectedCategorie !== 'TOUS' ? selectedCategorie : undefined,
+      gravite: selectedGravite !== 'TOUS' ? selectedGravite : undefined,
+      periode: selectedPeriode !== 'TOUS' ? selectedPeriode : undefined,
+    }),
+    [
+      selectedQuartier,
+      selectedStatut,
+      selectedCategorie,
+      selectedGravite,
+      selectedPeriode,
+    ]
+  );
 
-    try {
-      const [statsRes, reportsRes] = await Promise.all([
-        getSignalementStatistiques(),
-        getSignalements({
-          quartier: selectedQuartier !== 'TOUS' ? selectedQuartier : undefined,
-          statut: selectedStatut !== 'TOUS' ? selectedStatut : undefined,
-          categorie: selectedCategorie !== 'TOUS' ? selectedCategorie : undefined,
-        }),
-      ]);
-      setGlobalStats(statsRes);
-      setSignalements(reportsRes);
-      setAccessDeniedError(null);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      if (status === 401) {
-        handleLogout();
-      } else if (status === 403) {
-        setAccessDeniedError(
-          err?.response?.data?.detail ||
-            'Accès refusé (HTTP 403) : cet espace de supervision est réservé exclusivement au Responsable Municipal.'
-        );
-      } else {
-        setActionError(
-          err?.response?.data?.detail ||
-            'Erreur lors du chargement des données du tableau de bord.'
-        );
-      }
-    } finally {
-      setIsLoading(false);
+  // Chargement des couches croisées externes (Trafic ML + Risk Map Protection Civile)
+  const loadOverlayLayers = useCallback(async () => {
+    const [trafficResult, riskResult] = await Promise.allSettled([
+      fetchTrafficSegments(),
+      fetchZonesRiskMap(),
+    ]);
+    if (trafficResult.status === 'fulfilled') {
+      setTrafficSegments(trafficResult.value);
     }
-  }, [selectedQuartier, selectedStatut, selectedCategorie]);
+    if (riskResult.status === 'fulfilled') {
+      setRiskZones(riskResult.value);
+    }
+  }, []);
+
+  // Chargement conjoint des statistiques filtrées, des signalements et des anomalies IA
+  const loadDashboardData = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!getAuthToken()) return;
+      if (!options?.silent) {
+        setIsLoading(true);
+      }
+      setActionError(null);
+
+      try {
+        const [statsRes, reportsRes, anomaliesRes] = await Promise.all([
+          getSignalementStatistiques(activeFilters),
+          getSignalements(activeFilters),
+          getAnomalies('ACTIVE'),
+        ]);
+        setGlobalStats(statsRes);
+        setSignalements(reportsRes);
+        setAnomalies(anomaliesRes.anomalies || []);
+        if (anomaliesRes.modele) {
+          setAnomaliesModelName(anomaliesRes.modele);
+        }
+        setAccessDeniedError(null);
+      } catch (err: any) {
+        const status = err?.response?.status;
+        if (status === 401) {
+          handleLogout();
+        } else if (status === 403) {
+          setAccessDeniedError(
+            err?.response?.data?.detail ||
+              'Accès refusé (HTTP 403) : cet espace de supervision est réservé exclusivement au Responsable Municipal.'
+          );
+        } else if (!options?.silent) {
+          setActionError(
+            err?.response?.data?.detail ||
+              'Erreur lors du chargement des données du tableau de bord.'
+          );
+        }
+      } finally {
+        if (!options?.silent) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [activeFilters, handleLogout]
+  );
 
   // Vérification initiale de session si un jeton existe déjà en stockage
   useEffect(() => {
@@ -279,7 +361,7 @@ export const MunicipalDashboard: React.FC = () => {
           handleLogout();
         }
       });
-  }, []);
+  }, [handleLogout]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -287,10 +369,22 @@ export const MunicipalDashboard: React.FC = () => {
     Promise.resolve().then(() => {
       if (!cancelled) {
         void loadDashboardData();
+        void loadOverlayLayers();
       }
     });
     return () => {
       cancelled = true;
+    };
+  }, [currentUser, loadDashboardData, loadOverlayLayers]);
+
+  // Auto-rafraîchissement discret toutes les 15s (synchronisation inter-tableaux de bord)
+  useEffect(() => {
+    if (!currentUser || !currentUser.est_responsable_municipal) return;
+    const intervalId = window.setInterval(() => {
+      void loadDashboardData({ silent: true });
+    }, 15000);
+    return () => {
+      window.clearInterval(intervalId);
     };
   }, [currentUser, loadDashboardData]);
 
@@ -308,8 +402,8 @@ export const MunicipalDashboard: React.FC = () => {
       setSignalements((prev) =>
         prev.map((s) => (s.id === id ? { ...s, statut: updated.statut } : s))
       );
-      // Rafraîchit immédiatement les statistiques globales (/statistiques/)
-      const refreshedStats = await getSignalementStatistiques();
+      // Rafraîchit immédiatement les statistiques filtrées (/statistiques/)
+      const refreshedStats = await getSignalementStatistiques(activeFilters);
       setGlobalStats(refreshedStats);
     } catch (err: any) {
       const status = err?.response?.status;
@@ -331,7 +425,94 @@ export const MunicipalDashboard: React.FC = () => {
     }
   };
 
-  // Filtrage recherche texte + tri par Priorité (Gravité & Mobilité) ou Date
+  const handleScanAnomalies = async () => {
+    setIsScanningAnomalies(true);
+    setActionError(null);
+    try {
+      await analyserAnomalies(6);
+      const [anomaliesRes, statsRes] = await Promise.all([
+        getAnomalies('ACTIVE'),
+        getSignalementStatistiques(activeFilters),
+      ]);
+      setAnomalies(anomaliesRes.anomalies || []);
+      setGlobalStats(statsRes);
+    } catch (err: any) {
+      setActionError(
+        err?.response?.data?.detail ||
+          "Erreur lors de l'analyse d'anomalies Isolation Forest."
+      );
+    } finally {
+      setIsScanningAnomalies(false);
+    }
+  };
+
+  const handleAcquitterAnomalie = async (id: number) => {
+    setAcknowledgingId(id);
+    setActionError(null);
+    try {
+      await acquitterAnomalie(id);
+      setAnomalies((prev) => prev.filter((a) => a.id !== id));
+      const refreshedStats = await getSignalementStatistiques(activeFilters);
+      setGlobalStats(refreshedStats);
+    } catch (err: any) {
+      setActionError(
+        err?.response?.data?.detail ||
+          "Impossible d'acquitter cette alerte d'anomalie."
+      );
+    } finally {
+      setAcknowledgingId(null);
+    }
+  };
+
+  const handleFilterZoneFromViz = useCallback(
+    (quartier: string, categorie?: string) => {
+      if (quartier) {
+        setSelectedQuartier(quartier);
+      }
+      if (categorie) {
+        setSelectedCategorie(categorie);
+      }
+      setSelectedStatut('TOUS');
+    },
+    []
+  );
+
+  const handleResetFilters = () => {
+    setSelectedQuartier('TOUS');
+    setSelectedStatut('TOUS');
+    setSelectedCategorie('TOUS');
+    setSelectedGravite('TOUS');
+    setSelectedPeriode('TOUS');
+    setSearchQuery('');
+  };
+
+  const trafficZoneCongestion = useMemo(() => {
+    const map = new Map<string, number>();
+    trafficSegments.forEach((seg) => {
+      if (!seg.zone) return;
+      const existing = map.get(seg.zone) ?? 0;
+      if (seg.congestion_index > existing) {
+        map.set(seg.zone, seg.congestion_index);
+      }
+    });
+    return map;
+  }, [trafficSegments]);
+
+  const availableQuartiers = useMemo(() => {
+    const set = new Set<string>(QUARTIERS_LIST);
+    (globalStats?.par_quartier || []).forEach((q) => {
+      if (q.quartier) set.add(q.quartier);
+    });
+    anomalies.forEach((a) => {
+      if (a.quartier) set.add(a.quartier);
+    });
+    if (selectedQuartier && selectedQuartier !== 'TOUS') {
+      set.add(selectedQuartier);
+    }
+    return Array.from(set);
+  }, [globalStats, anomalies, selectedQuartier]);
+
+  // Filtrage recherche texte + tri par Priorité (Gravité, Mobilité & Trafic Live) ou Date
   const processedReports = useMemo(() => {
     let items = signalements;
     if (searchQuery.trim()) {
@@ -347,7 +528,7 @@ export const MunicipalDashboard: React.FC = () => {
 
     const withPriority = items.map((s) => ({
       item: s,
-      priority: computeInterventionPriority(s),
+      priority: computeInterventionPriority(s, trafficZoneCongestion),
     }));
 
     if (sortMode === 'PRIORITY') {
@@ -361,7 +542,7 @@ export const MunicipalDashboard: React.FC = () => {
     }
 
     return withPriority;
-  }, [signalements, searchQuery, sortMode]);
+  }, [signalements, searchQuery, sortMode, trafficZoneCongestion]);
 
   const getFullImageUrl = (path?: string | null) => {
     if (!path) return '';
@@ -478,16 +659,28 @@ export const MunicipalDashboard: React.FC = () => {
     );
   }
 
-  // Extraction des KPIs depuis /api/signalements/statistiques/
+  // Extraction des KPIs filtrés depuis /api/signalements/statistiques/
   const totalSignalements = globalStats?.total_signalements ?? signalements.length;
-  const enAttenteCount = globalStats?.par_statut?.EN_ATTENTE ?? 0;
-  const enCoursCount =
+  const enAttenteCount =
+    globalStats?.incidents_en_attente ?? globalStats?.par_statut?.EN_ATTENTE ?? 0;
+  const chantiersActifsCount =
+    globalStats?.chantiers_actifs ??
     (globalStats?.par_statut?.EN_COURS ?? 0) +
-    (globalStats?.par_statut?.CONFIRME ?? 0);
+      (globalStats?.par_statut?.CONFIRME ?? 0);
+  const enCoursOnly = globalStats?.details_chantiers?.en_cours ?? globalStats?.par_statut?.EN_COURS ?? 0;
+  const confirmesOnly = globalStats?.details_chantiers?.confirmes ?? globalStats?.par_statut?.CONFIRME ?? 0;
   const resolusCount = globalStats?.par_statut?.RESOLU ?? 0;
   const tauxResolution = globalStats?.taux_resolution_pourcent ?? 0;
   const photosFlouteesCount = globalStats?.conformite_inpdp?.photos_floutees ?? 0;
   const zonesFlouteesCount = globalStats?.conformite_inpdp?.total_zones_floutees ?? 0;
+  const zonesDensesCount = globalStats?.zones_haute_densite?.length ?? 0;
+  const hasActiveFilter =
+    selectedQuartier !== 'TOUS' ||
+    selectedStatut !== 'TOUS' ||
+    selectedCategorie !== 'TOUS' ||
+    selectedGravite !== 'TOUS' ||
+    selectedPeriode !== 'TOUS' ||
+    searchQuery.trim().length > 0;
 
   return (
     <div style={{ maxWidth: 1320, margin: '0 auto', padding: '24px 20px' }}>
@@ -556,8 +749,29 @@ export const MunicipalDashboard: React.FC = () => {
             </span>
           </div>
 
+          <span
+            title="Synchronisation automatique inter-modules toutes les 15 secondes"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid rgba(56, 189, 248, 0.28)',
+              padding: '7px 11px',
+              borderRadius: 8,
+              fontSize: 12,
+              color: '#38bdf8',
+              fontWeight: 600,
+            }}
+          >
+            <Activity size={14} /> Synchro 15s
+          </span>
+
           <button
-            onClick={loadDashboardData}
+            onClick={() => {
+              void loadDashboardData();
+              void loadOverlayLayers();
+            }}
             disabled={isLoading}
             style={{
               background: 'var(--bg-card)',
@@ -625,11 +839,349 @@ export const MunicipalDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Cartes KPI alimentées par /api/signalements/statistiques/ */}
+      {/* Bannière IA Détection d'Anomalies Spatio-Temporelles (Isolation Forest) */}
+      <div
+        className={`rounded-xl border p-4 mb-5 transition-colors ${
+          anomalies.length > 0
+            ? 'border-rose-500/45 bg-gradient-to-r from-rose-950/60 via-slate-900/90 to-amber-950/40'
+            : 'border-slate-800 bg-slate-900/60'
+        }`}
+      >
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div
+              className={`p-2 rounded-lg border ${
+                anomalies.length > 0
+                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                  : 'bg-sky-500/15 border-sky-500/30 text-sky-300'
+              }`}
+            >
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-bold text-white m-0">
+                  Détection d&apos;Anomalies IA ({anomaliesModelName})
+                </h2>
+                {anomalies.length > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/40">
+                    {anomalies.length} alerte(s) active(s)
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    Aucune accumulation anormale détectée
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-1 mb-0">
+                Surveillance non supervisée des accumulations soudaines (filtrage anti-faux positifs sur incidents isolés).
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void handleScanAnomalies()}
+            disabled={isScanningAnomalies}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/35 text-sky-200 disabled:opacity-50 cursor-pointer self-start md:self-auto"
+          >
+            <RefreshCw
+              size={13}
+              className={isScanningAnomalies ? 'animate-spin' : ''}
+            />
+            {isScanningAnomalies
+              ? 'Analyse ML en cours...'
+              : 'Lancer scan IA (6h)'}
+          </button>
+        </div>
+
+        {anomalies.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+            {anomalies.map((anomalie) => {
+              const catLabel =
+                CATEGORIE_META[anomalie.categorie as CategorieSignalement]
+                  ?.label || anomalie.categorie;
+              const sevColor =
+                anomalie.severite === 'CRITIQUE'
+                  ? 'bg-red-500/20 text-red-200 border-red-500/45'
+                  : anomalie.severite === 'ELEVEE'
+                    ? 'bg-orange-500/20 text-orange-200 border-orange-500/45'
+                    : 'bg-amber-500/20 text-amber-200 border-amber-500/45';
+
+              return (
+                <div
+                  key={anomalie.id}
+                  className="rounded-lg border border-slate-700/80 bg-slate-950/75 p-3.5 flex flex-col justify-between gap-2.5"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-bold border ${sevColor}`}
+                        >
+                          {anomalie.severite}
+                        </span>
+                        <span className="text-xs font-bold text-white">
+                          {anomalie.quartier} · {catLabel}
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-rose-300 tabular-nums">
+                        Score IA :{' '}
+                        {anomalie.score_anomalie <= 1
+                          ? Math.round(anomalie.score_anomalie * 100)
+                          : Math.round(anomalie.score_anomalie)}
+                        %
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed m-0">
+                      {anomalie.explication}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                    <span className="text-[11px] text-slate-400">
+                      {anomalie.nb_signalements} signalements / {anomalie.fenetre_heures}h
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleFilterZoneFromViz(
+                            anomalie.quartier,
+                            anomalie.categorie
+                          )
+                        }
+                        className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 cursor-pointer"
+                      >
+                        Filtrer cette zone
+                      </button>
+                      <button
+                        type="button"
+                        disabled={acknowledgingId === anomalie.id}
+                        onClick={() => void handleAcquitterAnomalie(anomalie.id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={12} />
+                        {acknowledgingId === anomalie.id
+                          ? 'Validation...'
+                          : 'Acquitter'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Barre de filtres multi-critères (pilote KPIs, Graphiques, Heatmap & File) */}
+      <div
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 20,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 12,
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 13 }}>
+            <Filter size={15} /> Filtres :
+          </div>
+
+          <select
+            aria-label="Filtrer par période"
+            value={selectedPeriode}
+            onChange={(e) => setSelectedPeriode(e.target.value)}
+            style={{
+              background: 'var(--bg-dark)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 6,
+              padding: '6px 12px',
+              color: 'var(--text-main)',
+              fontSize: 13,
+            }}
+          >
+            <option value="TOUS">Toute période</option>
+            <option value="24h">Dernières 24h</option>
+            <option value="7j">7 derniers jours</option>
+            <option value="30j">30 derniers jours</option>
+          </select>
+
+          <select
+            aria-label="Filtrer par quartier"
+            value={selectedQuartier}
+            onChange={(e) => setSelectedQuartier(e.target.value)}
+            style={{
+              background: 'var(--bg-dark)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 6,
+              padding: '6px 12px',
+              color: 'var(--text-main)',
+              fontSize: 13,
+            }}
+          >
+            {availableQuartiers.map((q) => (
+              <option key={q} value={q}>
+                {q === 'TOUS' ? 'Tous les quartiers' : q}
+              </option>
+            ))}
+          </select>
+
+          <select
+            aria-label="Filtrer par catégorie"
+            value={selectedCategorie}
+            onChange={(e) => setSelectedCategorie(e.target.value)}
+            style={{
+              background: 'var(--bg-dark)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 6,
+              padding: '6px 12px',
+              color: 'var(--text-main)',
+              fontSize: 13,
+            }}
+          >
+            <option value="TOUS">Toutes les catégories</option>
+            <option value="ACCIDENT">Accident</option>
+            <option value="SIGNALISATION">Signalisation</option>
+            <option value="NID_DE_POULE">Nid-de-poule</option>
+            <option value="ECLAIRAGE">Éclairage</option>
+            <option value="DECHETS">Déchets</option>
+            <option value="AUTRE">Autre</option>
+          </select>
+
+          <select
+            aria-label="Filtrer par gravité"
+            value={selectedGravite}
+            onChange={(e) => setSelectedGravite(e.target.value)}
+            style={{
+              background: 'var(--bg-dark)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 6,
+              padding: '6px 12px',
+              color: 'var(--text-main)',
+              fontSize: 13,
+            }}
+          >
+            <option value="TOUS">Toutes les gravités</option>
+            <option value="CRITIQUE">Critique</option>
+            <option value="ELEVEE">Élevée</option>
+            <option value="MOYENNE">Moyenne</option>
+            <option value="FAIBLE">Faible</option>
+          </select>
+
+          <select
+            aria-label="Filtrer par statut"
+            value={selectedStatut}
+            onChange={(e) => setSelectedStatut(e.target.value)}
+            style={{
+              background: 'var(--bg-dark)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 6,
+              padding: '6px 12px',
+              color: 'var(--text-main)',
+              fontSize: 13,
+            }}
+          >
+            <option value="TOUS">Tous les statuts</option>
+            <option value="EN_ATTENTE">En attente</option>
+            <option value="CONFIRME">Confirmé</option>
+            <option value="EN_COURS">En cours</option>
+            <option value="RESOLU">Résolu</option>
+            <option value="REJETE_SPAM">Rejeté / Spam</option>
+          </select>
+
+          <button
+            type="button"
+            onClick={() =>
+              setSortMode((m) => (m === 'PRIORITY' ? 'RECENT' : 'PRIORITY'))
+            }
+            style={{
+              background: 'rgba(56, 189, 248, 0.12)',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              borderRadius: 6,
+              padding: '6px 12px',
+              color: '#38bdf8',
+              fontSize: 12.5,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <ArrowUpDown size={13} />
+            <span>
+              {sortMode === 'PRIORITY'
+                ? 'Tri : Priorité (Gravité & Trafic)'
+                : 'Tri : Plus récents'}
+            </span>
+          </button>
+
+          {hasActiveFilter && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 6,
+                padding: '6px 10px',
+                color: '#fca5a5',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <X size={13} /> Réinitialiser
+            </button>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'var(--bg-dark)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 6,
+            padding: '6px 12px',
+            minWidth: 220,
+          }}
+        >
+          <Search size={14} color="var(--text-dim)" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Rechercher un signalement..."
+            style={{
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: 'var(--text-main)',
+              fontSize: 13,
+              width: '100%',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Cartes KPI filtrables alimentées par /api/signalements/statistiques/ */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))',
           gap: 14,
           marginBottom: 20,
         }}
@@ -652,7 +1204,7 @@ export const MunicipalDashboard: React.FC = () => {
             {totalSignalements}
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4 }}>
-            Base globale municipale
+            {hasActiveFilter ? 'Périmètre filtré' : 'Base globale municipale'}
           </div>
         </div>
 
@@ -688,15 +1240,15 @@ export const MunicipalDashboard: React.FC = () => {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
-              En intervention
+              Chantiers & Actifs
             </span>
             <Zap size={18} color="#06b6d4" />
           </div>
           <div style={{ fontSize: 28, fontWeight: 800, color: '#06b6d4' }}>
-            {enCoursCount}
+            {chantiersActifsCount}
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4 }}>
-            Pris en charge voirie
+            {enCoursOnly} en cours · {confirmesOnly} confirmé(s)
           </div>
         </div>
 
@@ -710,7 +1262,34 @@ export const MunicipalDashboard: React.FC = () => {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
-              Résolus & Performance
+              Zones Denses & IA
+            </span>
+            <Flame size={18} color="#f97316" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <span style={{ fontSize: 28, fontWeight: 800, color: '#fb923c' }}>
+              {zonesDensesCount}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: anomalies.length > 0 ? '#f87171' : '#94a3b8' }}>
+              · {anomalies.length} anomalie(s)
+            </span>
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4 }}>
+            Grilles spatiales actives
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 12,
+            padding: '16px 20px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
+              Résolus & Taux
             </span>
             <TrendingUp size={18} color="#10b981" />
           </div>
@@ -765,237 +1344,37 @@ export const MunicipalDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Synthèse statistique par Catégorie & Top Quartiers (issu de /statistiques/) */}
-      {globalStats && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: 14,
-            marginBottom: 20,
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 12,
-              padding: 16,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13.5, fontWeight: 700, color: 'var(--text-main)' }}>
-              <BarChart3 size={16} color="#38bdf8" />
-              <span>Répartition par Catégorie</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {Object.entries(globalStats.par_categorie || {}).map(([cat, count]) => {
-                const meta = CATEGORIE_META[cat as CategorieSignalement] || {
-                  label: cat,
-                  icon: '📍',
-                };
-                return (
-                  <div
-                    key={cat}
-                    style={{
-                      background: 'var(--bg-dark)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 8,
-                      padding: '6px 10px',
-                      fontSize: 12,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    <span>{meta.icon}</span>
-                    <span style={{ color: 'var(--text-muted)' }}>{meta.label} :</span>
-                    <strong style={{ color: 'var(--text-main)' }}>{count}</strong>
-                  </div>
-                );
-              })}
-              {Object.keys(globalStats.par_categorie || {}).length === 0 && (
-                <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Aucune donnée disponible.</span>
-              )}
-            </div>
-          </div>
+      {/* Graphiques synthétiques (Évolution, Catégories, Gravité/Résolution) */}
+      <MunicipalCharts
+        stats={globalStats}
+        activeCategorie={selectedCategorie}
+        onSelectCategorie={(cat) => setSelectedCategorie(cat)}
+      />
 
-          <div
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 12,
-              padding: 16,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13.5, fontWeight: 700, color: 'var(--text-main)' }}>
-              <Activity size={16} color="#f59e0b" />
-              <span>Zones & Quartiers les plus touchés</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {(globalStats.par_quartier || []).slice(0, 5).map((q) => (
-                <div
-                  key={q.quartier}
-                  style={{
-                    background: 'var(--bg-dark)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 8,
-                    padding: '6px 10px',
-                    fontSize: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  <MapPin size={12} color="#38bdf8" />
-                  <span style={{ color: 'var(--text-muted)' }}>{q.quartier} :</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{q.total}</strong>
-                </div>
-              ))}
-              {(globalStats.par_quartier || []).length === 0 && (
-                <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Aucun quartier enregistré.</span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Barre de filtres & tri prioritaire */}
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-color)',
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 20,
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 14,
-          alignItems: 'center',
-          justifyContent: 'space-between',
+      {/* Carte de Chaleur Leaflet & Overlays Trafic / Risk Map */}
+      <MunicipalHeatmap
+        heatmapPoints={globalStats?.heatmap_points ?? []}
+        zonesHauteDensite={globalStats?.zones_haute_densite ?? []}
+        signalements={signalements}
+        anomalies={anomalies}
+        trafficSegments={trafficSegments}
+        riskZones={riskZones}
+        onFilterZone={handleFilterZoneFromViz}
+        onSelectSignalement={(sig) => {
+          if (sig.photo_floutee) {
+            const label =
+              CATEGORIE_META[sig.categorie as CategorieSignalement]?.label ||
+              sig.categorie;
+            setModalImage({
+              url: getFullImageUrl(sig.photo_floutee),
+              zones: sig.nb_zones_floutees,
+              title: `${label} - ${sig.quartier}`,
+            });
+          } else {
+            setSearchQuery(sig.quartier || sig.adresse_texte);
+          }
         }}
-      >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 13 }}>
-            <Filter size={15} /> Filtres :
-          </div>
-
-          <select
-            value={selectedQuartier}
-            onChange={(e) => setSelectedQuartier(e.target.value)}
-            style={{
-              background: 'var(--bg-dark)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 6,
-              padding: '6px 12px',
-              color: 'var(--text-main)',
-              fontSize: 13,
-            }}
-          >
-            {QUARTIERS_LIST.map((q) => (
-              <option key={q} value={q}>
-                {q === 'TOUS' ? 'Tous les quartiers' : q}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedStatut}
-            onChange={(e) => setSelectedStatut(e.target.value)}
-            style={{
-              background: 'var(--bg-dark)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 6,
-              padding: '6px 12px',
-              color: 'var(--text-main)',
-              fontSize: 13,
-            }}
-          >
-            <option value="TOUS">Tous les statuts</option>
-            <option value="EN_ATTENTE">En attente</option>
-            <option value="CONFIRME">Confirmé</option>
-            <option value="EN_COURS">En cours</option>
-            <option value="RESOLU">Résolu</option>
-            <option value="REJETE_SPAM">Rejeté / Spam</option>
-          </select>
-
-          <select
-            value={selectedCategorie}
-            onChange={(e) => setSelectedCategorie(e.target.value)}
-            style={{
-              background: 'var(--bg-dark)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 6,
-              padding: '6px 12px',
-              color: 'var(--text-main)',
-              fontSize: 13,
-            }}
-          >
-            <option value="TOUS">Toutes les catégories</option>
-            <option value="ACCIDENT">Accident</option>
-            <option value="SIGNALISATION">Signalisation</option>
-            <option value="NID_DE_POULE">Nid-de-poule</option>
-            <option value="ECLAIRAGE">Éclairage</option>
-            <option value="DECHETS">Déchets</option>
-            <option value="AUTRE">Autre</option>
-          </select>
-
-          <button
-            type="button"
-            onClick={() =>
-              setSortMode((m) => (m === 'PRIORITY' ? 'RECENT' : 'PRIORITY'))
-            }
-            style={{
-              background: 'rgba(56, 189, 248, 0.12)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              borderRadius: 6,
-              padding: '6px 12px',
-              color: '#38bdf8',
-              fontSize: 12.5,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <ArrowUpDown size={13} />
-            <span>
-              {sortMode === 'PRIORITY'
-                ? 'Tri : Priorité (Gravité & Mobilité)'
-                : 'Tri : Plus récents'}
-            </span>
-          </button>
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            background: 'var(--bg-dark)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 6,
-            padding: '6px 12px',
-            minWidth: 220,
-          }}
-        >
-          <Search size={14} color="var(--text-dim)" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher un signalement..."
-            style={{
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--text-main)',
-              fontSize: 13,
-              width: '100%',
-            }}
-          />
-        </div>
-      </div>
+      />
 
       {/* File priorisée des interventions */}
       {isLoading ? (

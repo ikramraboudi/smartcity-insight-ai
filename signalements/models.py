@@ -144,6 +144,10 @@ class Signalement(models.Model):
         verbose_name = 'Signalement'
         verbose_name_plural = 'Signalements'
         ordering = ['-date_creation']
+        indexes = [
+            models.Index(fields=['quartier', 'categorie', 'date_creation'], name='sig_quart_cat_date_idx'),
+            models.Index(fields=['statut', 'gravite', 'date_creation'], name='sig_stat_grav_date_idx'),
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -169,3 +173,66 @@ class Signalement(models.Model):
 
     def __str__(self):
         return f"Signalement {self.categorie} - {self.quartier} ({self.statut})"
+
+
+class AlerteAnomalie(models.Model):
+    """
+    Alerte automatique générée par le pipeline ML non supervisé (Isolation Forest)
+    lorsqu'un sursaut anormal de signalements est détecté dans un secteur donné.
+    """
+    class Statut(models.TextChoices):
+        ACTIVE = 'ACTIVE', 'Active'
+        ACQUITTEE = 'ACQUITTEE', 'Acquittée'
+
+    class Severite(models.TextChoices):
+        MODERE = 'MODERE', 'Modérée'
+        ELEVEE = 'ELEVEE', 'Élevée'
+        CRITIQUE = 'CRITIQUE', 'Critique'
+
+    quartier = models.CharField(max_length=120, db_index=True)
+    categorie = models.CharField(
+        max_length=50,
+        choices=Signalement.Categorie.choices,
+        db_index=True,
+    )
+    severite = models.CharField(
+        max_length=20,
+        choices=Severite.choices,
+        default=Severite.ELEVEE,
+    )
+    score_anomalie = models.FloatField(
+        help_text="Score d'anomalie normalisé Isolation Forest (0 à 100 %)"
+    )
+    decision_raw = models.FloatField(
+        default=0.0,
+        help_text="Score brut decision_function() d'Isolation Forest",
+    )
+    nb_signalements = models.PositiveIntegerField(default=0)
+    fenetre_heures = models.PositiveIntegerField(default=6)
+    latitude_centre = models.FloatField()
+    longitude_centre = models.FloatField()
+    explication = models.TextField()
+    statut = models.CharField(
+        max_length=20,
+        choices=Statut.choices,
+        default=Statut.ACTIVE,
+        db_index=True,
+    )
+    date_detection = models.DateTimeField(auto_now_add=True, db_index=True)
+    date_mise_a_jour = models.DateTimeField(auto_now=True)
+    date_acquittement = models.DateTimeField(null=True, blank=True)
+    acquittee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='anomalies_acquittees',
+    )
+
+    class Meta:
+        verbose_name = 'Alerte Anomalie IA'
+        verbose_name_plural = 'Alertes Anomalies IA'
+        ordering = ['-date_detection']
+
+    def __str__(self):
+        return f"Anomalie {self.categorie} @ {self.quartier} ({self.score_anomalie:.1f}% - {self.statut})"

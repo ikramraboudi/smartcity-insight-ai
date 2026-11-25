@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
   CheckCircle2,
   Clock,
+  FileText,
   Flame,
   Loader2,
+  Map as MapIcon,
   MapPin,
   Send,
   Shield,
@@ -13,12 +15,14 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { createSignalement } from '../services/api';
+import { createSignalement, saveCitizenReportId } from '../services/api';
 import {
   CategorieSignalement,
   GraviteSignalement,
   Signalement,
 } from '../types';
+import { CitizenLocationPickerMap } from './CitizenLocationPickerMap';
+import { CitizenTrackingView } from './CitizenTrackingView';
 
 const CATEGORIES: {
   value: CategorieSignalement;
@@ -110,6 +114,9 @@ const QUARTIERS_TUNIS = [
 ];
 
 export const CitizenReportForm: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'report' | 'tracking'>('report');
+  const [highlightReportId, setHighlightReportId] = useState<string | null>(null);
+
   const [categorie, setCategorie] = useState<CategorieSignalement>('NID_DE_POULE');
   const [gravite, setGravite] = useState<GraviteSignalement>('MOYENNE');
   const [description, setDescription] = useState('');
@@ -118,6 +125,7 @@ export const CitizenReportForm: React.FC = () => {
   const [latitude, setLatitude] = useState<number>(36.8005);
   const [longitude, setLongitude] = useState<number>(10.18);
   const [isGeolocating, setIsGeolocating] = useState(false);
+  const [gpsStatusText, setGpsStatusText] = useState<string>('Détection GPS...');
 
   // Gestion de la photo
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -128,11 +136,15 @@ export const CitizenReportForm: React.FC = () => {
   const [successResult, setSuccessResult] = useState<Signalement | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [duplicateReportId, setDuplicateReportId] = useState<string | null>(null);
 
   // Géolocalisation via l'API navigateur
-  const handleGeolocate = () => {
+  const handleGeolocate = useCallback((silentFallback = false) => {
     if (!navigator.geolocation) {
-      alert("La géolocalisation n'est pas supportée par votre navigateur.");
+      if (!silentFallback) {
+        alert("La géolocalisation n'est pas supportée par votre navigateur.");
+      }
+      setGpsStatusText('Position par défaut (Tunis) — ajustez sur la carte');
       return;
     }
     setIsGeolocating(true);
@@ -140,18 +152,38 @@ export const CitizenReportForm: React.FC = () => {
       (pos) => {
         setLatitude(Number(pos.coords.latitude.toFixed(6)));
         setLongitude(Number(pos.coords.longitude.toFixed(6)));
+        setGpsStatusText('Position GPS détectée automatiquement');
         setIsGeolocating(false);
       },
       (err) => {
         console.warn('Erreur géolocalisation:', err);
-        // Fallback Centre-ville Tunis
         setLatitude(36.8005);
         setLongitude(10.18);
+        setGpsStatusText('Position par défaut (Tunis) — cliquez sur la carte pour préciser');
         setIsGeolocating(false);
       },
-      { timeout: 10000, enableHighAccuracy: true }
+      { timeout: 8000, enableHighAccuracy: true }
     );
-  };
+  }, []);
+
+  // Géolocalisation GPS automatique au chargement
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        handleGeolocate(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [handleGeolocate]);
+
+  const handleMapLocationChange = useCallback((lat: number, lng: number) => {
+    setLatitude(lat);
+    setLongitude(lng);
+    setGpsStatusText('Position ajustée manuellement sur la carte');
+  }, []);
 
   // Sélection et preview de la photo
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -177,6 +209,7 @@ export const CitizenReportForm: React.FC = () => {
     setIsSubmitting(true);
     setErrorMessage(null);
     setIsRateLimited(false);
+    setDuplicateReportId(null);
 
     try {
       const formData = new FormData();
@@ -193,6 +226,8 @@ export const CitizenReportForm: React.FC = () => {
       }
 
       const result = await createSignalement(formData);
+      saveCitizenReportId(result.id);
+      setHighlightReportId(result.id);
       setSuccessResult(result);
       // Réinitialisation du formulaire
       setDescription('');
@@ -203,7 +238,14 @@ export const CitizenReportForm: React.FC = () => {
       if (err.response?.status === 429) {
         setIsRateLimited(true);
         setErrorMessage(
-          '⚠️ Limite anti-spam atteinte : vous ne pouvez soumettre que 5 signalements par heure depuis votre adresse IP pour protéger la plateforme contre les faux signalements.'
+          '⚠️ Limite anti-spam atteinte : quota horaire dépassé pour protéger la plateforme contre les faux signalements.'
+        );
+      } else if (err.response?.status === 409) {
+        setIsRateLimited(true);
+        const dupId = err.response?.data?.doublon_id || null;
+        setDuplicateReportId(dupId);
+        setErrorMessage(
+          `ℹ️ ${err.response?.data?.detail || 'Un signalement similaire a déjà été enregistré à proximité.'}`
         );
       } else {
         const detail =
@@ -219,9 +261,9 @@ export const CitizenReportForm: React.FC = () => {
   };
 
   return (
-    <div style={{ maxWidth: 880, margin: '0 auto', padding: '24px 16px' }}>
+    <div style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px' }}>
       {/* En-tête */}
-      <div style={{ marginBottom: 24, textAlign: 'center' }}>
+      <div style={{ marginBottom: 20, textAlign: 'center' }}>
         <div
           style={{
             display: 'inline-flex',
@@ -233,143 +275,258 @@ export const CitizenReportForm: React.FC = () => {
             color: '#60a5fa',
             fontSize: 13,
             fontWeight: 600,
-            marginBottom: 12,
+            marginBottom: 10,
           }}
         >
           <Zap size={15} /> Portail Citoyen SmartCity Tunis
         </div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-main)', marginBottom: 8 }}>
-          Signaler une anomalie urbaine
+        <h1 style={{ fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: 700, color: 'var(--text-main)', marginBottom: 8 }}>
+          Espace Participatif Citoyen
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: 14, maxWidth: 600, margin: '0 auto' }}>
-          Contribuez à l'amélioration de votre ville. Vos signalements sont transmis en direct aux
-          services municipaux avec garantie de confidentialité.
+        <p style={{ color: 'var(--text-muted)', fontSize: 13.5, maxWidth: 640, margin: '0 auto 18px' }}>
+          Signalez une anomalie urbaine avec anonymisation INPDP automatique, ou suivez en direct
+          l'intervention des services municipaux sur la carte du Grand Tunis.
         </p>
+
+        {/* Barre d'onglets harmonisée */}
+        <div
+          style={{
+            display: 'inline-flex',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            gap: 8,
+            padding: 6,
+            borderRadius: 12,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab('report')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '9px 18px',
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13.5,
+              fontWeight: 600,
+              background: activeTab === 'report' ? 'linear-gradient(135deg, #2563eb, #0284c7)' : 'transparent',
+              color: activeTab === 'report' ? '#fff' : 'var(--text-muted)',
+              boxShadow: activeTab === 'report' ? '0 2px 10px rgba(37, 99, 235, 0.35)' : 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <FileText size={15} />
+            <span>Signaler un incident</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('tracking')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '9px 18px',
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13.5,
+              fontWeight: 600,
+              background: activeTab === 'tracking' ? 'linear-gradient(135deg, #059669, #0d9488)' : 'transparent',
+              color: activeTab === 'tracking' ? '#fff' : 'var(--text-muted)',
+              boxShadow: activeTab === 'tracking' ? '0 2px 10px rgba(16, 185, 129, 0.35)' : 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <MapIcon size={15} />
+            <span>Carte & Suivi des signalements</span>
+          </button>
+        </div>
       </div>
 
-      {/* Message de confirmation de succès */}
-      {successResult && (
-        <div
-          style={{
-            background: 'rgba(16, 185, 129, 0.12)',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
-            borderRadius: 12,
-            padding: 20,
-            marginBottom: 24,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <CheckCircle2 size={24} color="#10b981" />
-            <div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
-                Signalement enregistré avec succès !
-              </h3>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Identifiant : <code style={{ color: '#38bdf8' }}>{successResult.id}</code>
-              </p>
-            </div>
-          </div>
+      {activeTab === 'tracking' ? (
+        <CitizenTrackingView highlightReportId={highlightReportId} />
+      ) : (
+        <div style={{ maxWidth: 860, margin: '0 auto' }}>
+          {/* Message de confirmation de succès */}
+          {successResult && (
+            <div
+              style={{
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: 12,
+                padding: 20,
+                marginBottom: 24,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <CheckCircle2 size={24} color="#10b981" />
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
+                    Signalement enregistré avec succès !
+                  </h3>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    Identifiant : <code style={{ color: '#38bdf8' }}>{successResult.id}</code>
+                  </p>
+                </div>
+              </div>
 
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 16,
-              background: 'rgba(0, 0, 0, 0.25)',
-              padding: 12,
-              borderRadius: 8,
-              fontSize: 13,
-            }}
-          >
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>Catégorie : </span>
-              <strong>{successResult.categorie}</strong>
-            </div>
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>Quartier : </span>
-              <strong>{successResult.quartier}</strong>
-            </div>
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>Statut : </span>
-              <span
+              <div
                 style={{
-                  background: 'rgba(59, 130, 246, 0.2)',
-                  color: '#60a5fa',
-                  padding: '2px 8px',
-                  borderRadius: 10,
-                  fontSize: 12,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 16,
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  padding: 12,
+                  borderRadius: 8,
+                  fontSize: 13,
                 }}
               >
-                {successResult.statut}
-              </span>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Catégorie : </span>
+                  <strong>{successResult.categorie}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Quartier : </span>
+                  <strong>{successResult.quartier}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Statut : </span>
+                  <span
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.2)',
+                      color: '#60a5fa',
+                      padding: '2px 8px',
+                      borderRadius: 10,
+                      fontSize: 12,
+                    }}
+                  >
+                    {successResult.statut}
+                  </span>
+                </div>
+                {successResult.visages_plaques_floutes && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981' }}>
+                    <Shield size={14} />
+                    <span>
+                      Floutage IA INPDP appliqué ({successResult.nb_zones_floutees} zone(s) anonymisée(s))
+                    </span>
+                  </div>
+                )}
+                {successResult.alerte_liee && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f87171' }}>
+                    <Flame size={14} />
+                    <span>
+                      Alerte transmise en direct à la Protection Civile (Alerte #{successResult.alerte_liee})
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHighlightReportId(successResult.id);
+                    setActiveTab('tracking');
+                  }}
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    border: '1px solid rgba(16, 185, 129, 0.45)',
+                    color: '#34d399',
+                    padding: '7px 14px',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <MapIcon size={14} />
+                  <span>Voir sur la carte & suivre l'avancement</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSuccessResult(null)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(148, 163, 184, 0.35)',
+                    color: 'var(--text-muted)',
+                    padding: '7px 14px',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
-            {successResult.visages_plaques_floutes && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981' }}>
-                <Shield size={14} />
-                <span>
-                  Floutage IA INPDP appliqué ({successResult.nb_zones_floutees} zone(s) anonymisée(s))
-                </span>
-              </div>
-            )}
-            {successResult.alerte_liee && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f87171' }}>
-                <Flame size={14} />
-                <span>
-                  Alerte transmise en direct à la Protection Civile (Alerte #{successResult.alerte_liee})
-                </span>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => setSuccessResult(null)}
-            style={{
-              marginTop: 14,
-              background: 'transparent',
-              border: '1px solid rgba(16, 185, 129, 0.4)',
-              color: '#10b981',
-              padding: '6px 14px',
-              borderRadius: 6,
-              fontSize: 13,
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            Nouveau signalement
-          </button>
-        </div>
-      )}
-
-      {/* Message d'erreur / Rate Limiting */}
-      {errorMessage && (
-        <div
-          style={{
-            background: isRateLimited ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-            border: `1px solid ${isRateLimited ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 24,
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 12,
-          }}
-        >
-          {isRateLimited ? (
-            <Clock size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
-          ) : (
-            <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
           )}
-          <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-main)' }}>
-            {errorMessage}
-          </div>
-          <button
-            onClick={() => setErrorMessage(null)}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
+
+          {/* Message d'erreur / Rate Limiting / Doublon */}
+          {errorMessage && (
+            <div
+              style={{
+                background: isRateLimited ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                border: `1px solid ${isRateLimited ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 24,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
+              }}
+            >
+              {isRateLimited ? (
+                <Clock size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
+              ) : (
+                <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
+              )}
+              <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-main)' }}>
+                <div>{errorMessage}</div>
+                {duplicateReportId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHighlightReportId(duplicateReportId);
+                      setActiveTab('tracking');
+                    }}
+                    style={{
+                      marginTop: 8,
+                      background: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.35)',
+                      color: '#38bdf8',
+                      borderRadius: 6,
+                      padding: '5px 10px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Consulter le signalement existant sur la carte →
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMessage(null);
+                  setDuplicateReportId(null);
+                }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
 
       {/* Formulaire principal */}
       <form
@@ -436,7 +593,7 @@ export const CitizenReportForm: React.FC = () => {
           <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 10, color: 'var(--text-main)' }}>
             2. Niveau de gravité estimé
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
             {GRAVITES.map((g) => {
               const isSelected = gravite === g.value;
               return (
@@ -498,9 +655,9 @@ export const CitizenReportForm: React.FC = () => {
         {/* 4. Localisation & Quartier */}
         <div style={{ marginBottom: 24 }}>
           <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 10, color: 'var(--text-main)' }}>
-            4. Localisation
+            4. Localisation (GPS automatique & carte interactive)
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 12 }}>
             <div>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
                 Quartier
@@ -553,27 +710,33 @@ export const CitizenReportForm: React.FC = () => {
           <div
             style={{
               display: 'flex',
+              flexWrap: 'wrap',
               alignItems: 'center',
               justifyContent: 'space-between',
+              gap: 10,
               background: 'var(--bg-dark)',
               border: '1px solid var(--border-color)',
               borderRadius: 8,
               padding: '10px 14px',
               fontSize: 13,
+              marginBottom: 12,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
-              <MapPin size={16} color="#38bdf8" />
-              <span>
-                Coordonnées GPS :{' '}
-                <strong style={{ color: 'var(--text-main)' }}>
-                  {latitude}, {longitude}
-                </strong>
-              </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
+                <MapPin size={16} color="#38bdf8" />
+                <span>
+                  GPS :{' '}
+                  <strong style={{ color: 'var(--text-main)' }}>
+                    {latitude}, {longitude}
+                  </strong>
+                </span>
+              </div>
+              <span style={{ fontSize: 11.5, color: '#34d399', paddingLeft: 24 }}>{gpsStatusText}</span>
             </div>
             <button
               type="button"
-              onClick={handleGeolocate}
+              onClick={() => handleGeolocate(false)}
               disabled={isGeolocating}
               style={{
                 background: 'rgba(56, 189, 248, 0.15)',
@@ -593,6 +756,12 @@ export const CitizenReportForm: React.FC = () => {
               {isGeolocating ? 'Recherche...' : 'Me géolocaliser'}
             </button>
           </div>
+
+          <CitizenLocationPickerMap
+            latitude={latitude}
+            longitude={longitude}
+            onLocationChange={handleMapLocationChange}
+          />
         </div>
 
         {/* 5. Téléversement de photo & Information INPDP */}
@@ -741,6 +910,8 @@ export const CitizenReportForm: React.FC = () => {
           )}
         </button>
       </form>
+        </div>
+      )}
     </div>
   );
 };
