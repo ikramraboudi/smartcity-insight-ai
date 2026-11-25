@@ -6,6 +6,7 @@ Permet aux autres membres de l'équipe (ou au frontend) d'appeler le modèle ML 
 import json
 import os
 from datetime import datetime
+from django.core.cache import cache
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
@@ -99,9 +100,14 @@ def get_model_metrics_api(request):
     Retourne les métriques d'évaluation du modèle (8.5) :
     Comparaison Random Forest vs Gradient Boosting, MAE, RMSE, F1-Score et Feature Importances.
     """
+    cached = cache.get("ml_congestion_metrics")
+    if cached is not None:
+        return Response(cached)
+
     report_path = "ml_congestion/reports/model_evaluation.json"
     if os.path.exists(report_path):
         with open(report_path, "r", encoding="utf-8") as f:
             metrics = json.load(f)
+        cache.set("ml_congestion_metrics", metrics, timeout=3600)
         return Response(metrics)
     return Response({"error": "Rapport non trouvé. Veuillez lancer l'entraînement."}, status=404)

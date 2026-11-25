@@ -114,6 +114,24 @@ else:
         }
     }
 
+# Configuration Cache (Redis)
+USE_REDIS_CACHE = os.environ.get('USE_REDIS_CACHE', 'False').lower() in ('true', '1', 'yes')
+if USE_REDIS_CACHE:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/0',
+            'KEY_PREFIX': 'smartcity',
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'smartcity-local-cache',
+        }
+    }
+
 # Configuration Channel Layers (Django Channels)
 if USE_REDIS:
     CHANNEL_LAYERS = {

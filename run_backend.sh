@@ -13,11 +13,12 @@ elif [ -f "../venv/bin/activate" ]; then
     source ../venv/bin/activate
 fi
 
-# Enable PostgreSQL by default for multi-PC shared mode
+# Enable PostgreSQL + Redis Cache by default for multi-PC shared mode
 # Use InMemoryChannelLayer (USE_REDIS=False) since single Daphne process serves all clients
 # (avoids channels_redis 4.3.0 + redis 8.1.0 idle socket TimeoutError)
 export USE_POSTGRES=${USE_POSTGRES:-True}
 export USE_REDIS=${USE_REDIS:-False}
+export USE_REDIS_CACHE=${USE_REDIS_CACHE:-True}
 export DB_NAME=${DB_NAME:-smartcity_db}
 export DB_USER=${DB_USER:-smartcity_user}
 export DB_PASSWORD=${DB_PASSWORD:-smartcity_pass}

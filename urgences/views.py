@@ -2,6 +2,7 @@ import random
 import threading
 import json
 import urllib.request
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -77,7 +78,11 @@ def obtenir_geo_config(request):
 
 @api_view(['GET'])
 def lister_alertes(request):
-    """Retourne la liste des alertes d'accident récentes"""
+    """Retourne la liste des alertes d'accident récentes (avec cache Redis 30s)"""
+    cached = cache.get('alertes_recentes')
+    if cached is not None:
+        return Response(cached)
+
     alertes = AlerteAccident.objects.all().order_by('-date_creation')[:50]
     data = []
     for a in alertes:
@@ -96,11 +101,16 @@ def lister_alertes(request):
             "date_en_intervention": a.date_en_intervention.isoformat() if a.date_en_intervention else None,
             "date_cloture": a.date_cloture.isoformat() if a.date_cloture else None,
         })
+    cache.set('alertes_recentes', data, timeout=30)
     return Response(data)
 
 @api_view(['GET'])
 def lister_casernes(request):
-    """Retourne les coordonnées et capacités des casernes de Protection Civile du Cap Bon"""
+    """Retourne les coordonnées et capacités des casernes de Protection Civile du Cap Bon (cache 5min)"""
+    cached = cache.get('casernes_cap_bon')
+    if cached is not None:
+        return Response(cached)
+    cache.set('casernes_cap_bon', CASERNES_CAP_BON_LIST, timeout=300)
     return Response(CASERNES_CAP_BON_LIST)
 
 @api_view(['POST'])
@@ -122,6 +132,7 @@ def simuler_accident(request):
     )
     alerte = traiter_signalement(sig, valide_par_agent=True)
     notifier_simulateur_accident(alerte)
+    cache.delete('alertes_recentes')
     return Response({
         "message": "Alerte d'urgence simulée et diffusée en temps réel",
         "alerte_id": alerte.id,
@@ -151,6 +162,7 @@ def creer_signalement(request):
     valide_par_agent = bool(request.data.get('valide_par_agent', False))
     alerte = traiter_signalement(sig, valide_par_agent=valide_par_agent)
     notifier_simulateur_accident(alerte)
+    cache.delete('alertes_recentes')
 
     return Response({
         "message": "Signalement d'accident transmis et traité par la Protection Civile",
@@ -199,6 +211,7 @@ def changer_statut_intervention(request, alerte_id):
 
     if nouveau_statut == 'CLOTURE':
         notifier_simulateur_cloture(alerte.id)
+    cache.delete('alertes_recentes')
 
     return Response({
         "alerte_id": alerte.id,
