@@ -9,13 +9,12 @@ import {
   fetchCasernes,
   updateStatutAlerte,
   simulerAccident,
-  triggerSimulation,
   WS_BASE_URL,
   getActiveSession,
 } from '../services/api';
 import { playEmergencyAlarm, toggleSound, isSoundEnabled } from '../services/sound';
-import type { Alerte, Caserne, RouteInfo, StatutAlerte, SimulationResult } from '../types';
-import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronUp, Flame, ShieldAlert, Sparkles, TestTube2, Volume2, X } from 'lucide-react';
+import type { Alerte, Caserne, RouteInfo, StatutAlerte } from '../types';
+import { Flame, X } from 'lucide-react';
 
 export const ProtectionCivilePage: React.FC = () => {
   const [alertes, setAlertes] = useState<Alerte[]>([]);
@@ -35,11 +34,6 @@ export const ProtectionCivilePage: React.FC = () => {
     alerte: Alerte;
     timer: number;
   } | null>(null);
-
-  // Mode Simulation Jury
-  const [showSimuPanel, setShowSimuPanel] = useState<boolean>(true);
-  const [simulationLoading, setSimulationLoading] = useState<boolean>(false);
-  const [lastSimuResult, setLastSimuResult] = useState<SimulationResult | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
@@ -269,26 +263,6 @@ export const ProtectionCivilePage: React.FC = () => {
     }
   };
 
-  const handleRunSimulationJury = async (mode: 'fausse_alerte' | 'accident_confirme' | 'risk_map') => {
-    setSimulationLoading(true);
-    try {
-      const res = await triggerSimulation(mode);
-      setLastSimuResult(res);
-
-      if (mode === 'accident_confirme') {
-        playEmergencyAlarm();
-        // Recharger les alertes pour voir l'accident confirmé fusionné
-        await loadInitialData();
-      } else if (mode === 'risk_map') {
-        setIsRiskMapModalOpen(true);
-      }
-    } catch (err) {
-      console.error('Erreur exécution simulation jury:', err);
-    } finally {
-      setSimulationLoading(false);
-    }
-  };
-
   const handleSelectAlerte = (alerte: Alerte) => {
     setSelectedAlerte(alerte);
   };
@@ -448,163 +422,6 @@ export const ProtectionCivilePage: React.FC = () => {
             onSelectAlerte={handleSelectAlerte}
             onRouteCalculated={setActiveRoute}
           />
-
-          {/* Panneau Flottant « 🧪 Mode Simulation Jury » (Démo 1 Clic pour la Soutenance) */}
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 20,
-              left: 20,
-              zIndex: 35,
-              backgroundColor: 'rgba(15, 23, 42, 0.95)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(56, 189, 248, 0.35)',
-              borderRadius: 10,
-              padding: showSimuPanel ? '12px 16px' : '8px 12px',
-              maxWidth: 420,
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.6)',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-              }}
-              onClick={() => setShowSimuPanel(!showSimuPanel)}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#38bdf8', fontWeight: 700, fontSize: 13 }}>
-                <TestTube2 size={16} />
-                <span>🧪 Mode Simulation Jury (Démo Live)</span>
-              </div>
-              <button
-                type="button"
-                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
-              >
-                {showSimuPanel ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-              </button>
-            </div>
-
-            {showSimuPanel && (
-              <div style={{ marginTop: 10 }}>
-                <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 10px 0' }}>
-                  Déclenchez en direct les scénarios clés exigés par le cahier des charges :
-                </p>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
-                  {/* Bouton Simulation 1 : Anti-Fausse Alerte */}
-                  <button
-                    type="button"
-                    disabled={simulationLoading}
-                    onClick={() => handleRunSimulationJury('fausse_alerte')}
-                    style={{
-                      background: 'rgba(100, 116, 139, 0.15)',
-                      border: '1px solid #475569',
-                      borderRadius: 6,
-                      color: '#cbd5e1',
-                      padding: '6px 10px',
-                      fontSize: 11.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#94a3b8')}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#475569')}
-                  >
-                    <span>🛡️</span>
-                    <div>
-                      <strong>1. Test Anti-Fausse Alerte</strong>
-                      <div style={{ fontSize: 10, color: '#94a3b8' }}>1 signalement isolé → en attente, pas de sirène</div>
-                    </div>
-                  </button>
-
-                  {/* Bouton Simulation 2 : Fusion PostGIS & Diffusion < 5s */}
-                  <button
-                    type="button"
-                    disabled={simulationLoading}
-                    onClick={() => handleRunSimulationJury('accident_confirme')}
-                    style={{
-                      background: 'rgba(239, 68, 68, 0.15)',
-                      border: '1px solid rgba(239, 68, 68, 0.4)',
-                      borderRadius: 6,
-                      color: '#fca5a5',
-                      padding: '6px 10px',
-                      fontSize: 11.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#ef4444')}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)')}
-                  >
-                    <span>🚨</span>
-                    <div>
-                      <strong>2. Clustering PostGIS (&lt; 5s)</strong>
-                      <div style={{ fontSize: 10, color: '#f87171' }}>3 signalements concordants → sirène & tracé live</div>
-                    </div>
-                  </button>
-
-                  {/* Bouton Simulation 3 : Générer Risk Map */}
-                  <button
-                    type="button"
-                    disabled={simulationLoading}
-                    onClick={() => handleRunSimulationJury('risk_map')}
-                    style={{
-                      background: 'rgba(16, 185, 129, 0.15)',
-                      border: '1px solid rgba(16, 185, 129, 0.4)',
-                      borderRadius: 6,
-                      color: '#6ee7b7',
-                      padding: '6px 10px',
-                      fontSize: 11.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#10b981')}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)')}
-                  >
-                    <span>🗺️</span>
-                    <div>
-                      <strong>3. Scénario Risk Map Tunis</strong>
-                      <div style={{ fontSize: 10, color: '#34d399' }}>Secteurs vert, orange, rouge & Assistant IA</div>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Résultat du dernier test */}
-                {lastSimuResult && (
-                  <div
-                    style={{
-                      marginTop: 10,
-                      padding: '8px 10px',
-                      borderRadius: 6,
-                      background: 'rgba(30, 41, 59, 0.8)',
-                      border: '1px solid #334155',
-                      fontSize: 11,
-                      color: '#e2e8f0',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#38bdf8', fontWeight: 700 }}>
-                      <CheckCircle2 size={13} />
-                      <span>{lastSimuResult.scenario}</span>
-                    </div>
-                    <div style={{ marginTop: 4, color: '#cbd5e1' }}>{lastSimuResult.message}</div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Colonne 3 : Panneau d'Intervention d'Urgence */}
