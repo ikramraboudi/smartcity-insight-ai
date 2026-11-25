@@ -636,9 +636,11 @@ class RegisterSignalementView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if User.objects.filter(email__iexact=email).exists():
+        if User.objects.filter(email__iexact=email).exists() or (
+            '@' not in email and User.objects.filter(username__iexact=email).exists()
+        ):
             return Response(
-                {'detail': 'Un compte avec cette adresse email existe déjà.'},
+                {'detail': 'Un compte avec cet identifiant ou adresse email existe déjà.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -656,14 +658,16 @@ class RegisterSignalementView(APIView):
             password=password,
         )
 
-        target_role = (
-            UserRole.RESPONSABLE_MUNICIPAL
-            if role == UserRole.RESPONSABLE_MUNICIPAL
-            else UserRole.CITOYEN
-        )
+        if role == UserRole.RESPONSABLE_MUNICIPAL:
+            target_role = UserRole.RESPONSABLE_MUNICIPAL
+        elif role == UserRole.PROTECTION_CIVILE:
+            target_role = UserRole.PROTECTION_CIVILE
+        else:
+            target_role = UserRole.CITOYEN
         profil, _ = ProfilUtilisateur.objects.get_or_create(user=user)
         profil.role = target_role
         profil.save()
+        user.refresh_from_db()
 
         token = generate_jwt_token(user)
         return Response(

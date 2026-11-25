@@ -23,13 +23,23 @@ import {
 } from '../types';
 
 
+const WS_PROTOCOL =
+  typeof window !== 'undefined' && window.location.protocol === 'https:'
+    ? 'wss:'
+    : 'ws:';
+
+const WS_HOST =
+  typeof window !== 'undefined' && window.location.host
+    ? window.location.host
+    : '127.0.0.1:8000';
+
 export const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+  import.meta.env.VITE_BACKEND_URL || '';
 
 export const API_BASE_URL = `${BACKEND_URL}/api/`;
 
 export const WS_BASE_URL =
-  import.meta.env.VITE_WS_URL || 'ws://127.0.0.1:8000/ws/protection-civile/';
+  import.meta.env.VITE_WS_URL || `${WS_PROTOCOL}//${WS_HOST}/ws/protection-civile/`;
 
 const AUTH_TOKEN_KEY = 'smartcity_jwt_token';
 const AUTH_USER_KEY = 'smartcity_auth_user';
@@ -84,7 +94,7 @@ export function getActiveSession(): UserSession | null {
         id: user.id,
         username: user.username,
         email: user.email,
-        role: user.role === 'RESPONSABLE_MUNICIPAL' ? 'RESPONSABLE_MUNICIPAL' : 'CITOYEN',
+        role: user.role,
         est_responsable_municipal: user.est_responsable_municipal,
         token: getAuthToken() || undefined,
       };
@@ -106,7 +116,7 @@ export function setActiveSession(session: UserSession, token?: string): void {
       id: typeof session.id === 'number' ? session.id : 1,
       username: session.username || session.email.split('@')[0],
       email: session.email,
-      role: session.role === 'RESPONSABLE_MUNICIPAL' ? 'RESPONSABLE_MUNICIPAL' : 'CITOYEN',
+      role: session.role,
       est_responsable_municipal: session.role === 'RESPONSABLE_MUNICIPAL',
     };
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(authUser));
@@ -203,7 +213,7 @@ export async function loginMunicipal(
 export async function registerAccount(payload: {
   email: string;
   password: string;
-  role: 'CITOYEN' | 'RESPONSABLE_MUNICIPAL';
+  role: 'CITOYEN' | 'RESPONSABLE_MUNICIPAL' | 'PROTECTION_CIVILE';
   username?: string;
 }): Promise<LoginResponse> {
   const response = await apiClient.post<LoginResponse>('signalements/auth/register/', payload);
@@ -565,7 +575,7 @@ export async function predictRiskMap(params: {
 // =============================================================================
 
 export const TRAFFIC_SIMULATOR_URL =
-  import.meta.env.VITE_TRAFFIC_SIMULATOR_URL || 'http://127.0.0.1:8001';
+  import.meta.env.VITE_TRAFFIC_SIMULATOR_URL || '/traffic-sim';
 
 export async function fetchTrafficSegments(): Promise<TrafficSegment[]> {
   try {

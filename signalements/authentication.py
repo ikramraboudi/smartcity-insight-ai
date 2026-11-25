@@ -28,9 +28,14 @@ def _b64url_decode(data: str) -> bytes:
 
 
 def get_user_role(user) -> str:
-    """Retourne le rôle effectif d'un utilisateur (CITOYEN ou RESPONSABLE_MUNICIPAL)."""
+    """Retourne le rôle effectif d'un utilisateur (CITOYEN, RESPONSABLE_MUNICIPAL ou PROTECTION_CIVILE)."""
     if is_responsable_municipal(user):
         return UserRole.RESPONSABLE_MUNICIPAL
+    try:
+        if user and user.is_authenticated and user.profil.role == UserRole.PROTECTION_CIVILE:
+            return UserRole.PROTECTION_CIVILE
+    except Exception:
+        pass
     return UserRole.CITOYEN
 
 

@@ -8,6 +8,7 @@ from django.dispatch import receiver
 class UserRole(models.TextChoices):
     CITOYEN = 'CITOYEN', 'Citoyen'
     RESPONSABLE_MUNICIPAL = 'RESPONSABLE_MUNICIPAL', 'Responsable Municipal'
+    PROTECTION_CIVILE = 'PROTECTION_CIVILE', 'Protection Civile'
 
 
 class ProfilUtilisateur(models.Model):

@@ -163,7 +163,7 @@ export interface CreateSignalementPayload {
   photo?: File | null;
 }
 
-export type UserRole = 'CITOYEN' | 'RESPONSABLE_MUNICIPAL';
+export type UserRole = 'CITOYEN' | 'RESPONSABLE_MUNICIPAL' | 'PROTECTION_CIVILE';
 
 export type PlatformRole = 'RESPONSABLE_MUNICIPAL' | 'CITOYEN' | 'PROTECTION_CIVILE';
 

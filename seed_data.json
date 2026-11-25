@@ -1,0 +1,141 @@
+[
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$Jq1wzJPu7u01Q6CM8qScGm$f7BcRaBpcpNlo2XAtikd5YeCz7pW5EtqU/Hy/a0WQ7g=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "responsable_mairie",
+    "first_name": "",
+    "last_name": "",
+    "email": "responsable_mairie",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-11-25T15:33:02.882Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$LjhDt7PXG7755KmBzh0hvK$mYC+oBz5VmUeSjN3pTBvIe1XwnuFVgAsyRwveapUvWg=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "citoyen_demo",
+    "first_name": "",
+    "last_name": "",
+    "email": "citoyen_demo",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-11-25T15:33:33.293Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$WmVDRut8zVS3SscZ3l6Krb$j6QB3FTa83fcLUXHDP+6v0Lac1jAmKiyVZ+HC+5QUz8=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "agent_pc",
+    "first_name": "",
+    "last_name": "",
+    "email": "agent_pc@protection-civile.tn",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-11-25T15:50:58.868Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "urgences.signalementaccident",
+  "pk": 1,
+  "fields": {
+    "latitude": 36.86,
+    "longitude": 10.165,
+    "adresse": "Route de Bizerte (GP8), Ariana Ouest",
+    "description": "Accident de la circulation avec blessés - Route de Bizerte (GP8), Ariana Ouest",
+    "gravite_estimee": "GRAVE",
+    "date_creation": "2026-11-25T15:30:59.685Z"
+  }
+},
+{
+  "model": "urgences.alerteaccident",
+  "pk": 1,
+  "fields": {
+    "latitude": 36.86,
+    "longitude": 10.165,
+    "adresse": "Route de Bizerte (GP8), Ariana Ouest",
+    "gravite": "GRAVE",
+    "statut": "CLOTURE",
+    "nb_signalements": 1,
+    "date_creation": "2026-11-25T15:30:59.694Z",
+    "date_confirmation": "2026-11-25T15:30:59.699Z",
+    "date_prise_en_charge": null,
+    "date_en_intervention": null,
+    "date_cloture": "2026-11-25T15:31:10.331Z",
+    "signalements_lies": [
+      1
+    ]
+  }
+},
+{
+  "model": "urgences.journalaudit",
+  "pk": 1,
+  "fields": {
+    "alerte": 1,
+    "utilisateur": null,
+    "action": "Alerte CONFIRMEE (1 signalements)",
+    "horodatage": "2026-11-25T15:30:59.702Z"
+  }
+},
+{
+  "model": "urgences.journalaudit",
+  "pk": 2,
+  "fields": {
+    "alerte": 1,
+    "utilisateur": null,
+    "action": "Changement de statut vers CLOTURE",
+    "horodatage": "2026-11-25T15:31:10.341Z"
+  }
+},
+{
+  "model": "signalements.profilutilisateur",
+  "pk": 1,
+  "fields": {
+    "user": [
+      "responsable_mairie"
+    ],
+    "role": "RESPONSABLE_MUNICIPAL",
+    "date_creation": "2026-11-25T15:33:03.346Z",
+    "date_mise_a_jour": "2026-11-25T15:50:58.861Z"
+  }
+},
+{
+  "model": "signalements.profilutilisateur",
+  "pk": 2,
+  "fields": {
+    "user": [
+      "citoyen_demo"
+    ],
+    "role": "CITOYEN",
+    "date_creation": "2026-11-25T15:33:33.701Z",
+    "date_mise_a_jour": "2026-11-25T15:50:58.865Z"
+  }
+},
+{
+  "model": "signalements.profilutilisateur",
+  "pk": 3,
+  "fields": {
+    "user": [
+      "agent_pc"
+    ],
+    "role": "PROTECTION_CIVILE",
+    "date_creation": "2026-11-25T15:50:58.869Z",
+    "date_mise_a_jour": "2026-11-25T15:50:59.340Z"
+  }
+}
+]

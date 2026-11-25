@@ -73,6 +73,31 @@ export const ProtectionCivilePage: React.FC = () => {
     loadInitialData();
   }, [loadInitialData]);
 
+  // Rafraîchissement automatique des alertes et de la carte toutes les 30 secondes
+  useEffect(() => {
+    const refreshMapData = async () => {
+      try {
+        const [alertesData, casernesData] = await Promise.all([
+          fetchAlertes(),
+          fetchCasernes(),
+        ]);
+        setAlertes(alertesData);
+        setCasernes(casernesData);
+        setSelectedAlerte((prev) => {
+          if (!prev) return null;
+          const updated = alertesData.find((a) => a.id === prev.id);
+          if (!updated || updated.statut === 'CLOTURE') return null;
+          return updated;
+        });
+      } catch (err) {
+        console.error('Erreur rafraîchissement carte (30s):', err);
+      }
+    };
+
+    const intervalId = window.setInterval(refreshMapData, 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   // Connexion WebSocket en direct (< 5s)
   useEffect(() => {
     let isMounted = true;

@@ -226,87 +226,85 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
         setTimeout(() => navigate('/dashboard'), 300);
 
       } else if (selectedRole === 'CITOYEN') {
-        // Citoyen
+        // Citoyen synchronisé avec PostgreSQL via Django REST
         if (authMode === 'LOGIN') {
-          try {
-            // Tente la validation via le backend si le compte existe
-            const data = await loginMunicipal(cleanEmail, password);
-            const session: UserSession = {
-              id: data.user.id,
-              username: data.user.username,
-              email: data.user.email,
-              role: 'CITOYEN',
-              est_responsable_municipal: false,
-              token: data.access,
-            };
-            setActiveSession(session, data.access);
-            onLoginSuccess?.(session);
-          } catch {
-            // Fallback de session locale citoyenne si compte démo hors-ligne
-            const session: UserSession = {
-              username: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail,
-              email: cleanEmail,
-              role: 'CITOYEN',
-              est_responsable_municipal: false,
-            };
-            setActiveSession(session);
-            onLoginSuccess?.(session);
-          }
+          const data = await loginMunicipal(cleanEmail, password);
+          const session: UserSession = {
+            id: data.user.id,
+            username: data.user.username,
+            email: data.user.email,
+            role: 'CITOYEN',
+            est_responsable_municipal: false,
+            token: data.access,
+          };
+          setActiveSession(session, data.access);
+          onLoginSuccess?.(session);
         } else {
-          // Inscription Citoyen : validation du numéro de téléphone / CIN
+          // Inscription Citoyen : validation du numéro de téléphone / CIN + création en base
           if (!telephoneCin.trim()) {
             throw new Error('Le numéro de téléphone ou CIN est obligatoire pour créer un compte Citoyen.');
           }
 
-          try {
-            const registered = await registerAccount({
-              email: cleanEmail,
-              password,
-              role: 'CITOYEN',
-              username: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail,
-            });
-            const session: UserSession = {
-              id: registered.user.id,
-              username: registered.user.username,
-              email: registered.user.email,
-              role: 'CITOYEN',
-              est_responsable_municipal: false,
-              telephone_cin: telephoneCin.trim(),
-              token: registered.access,
-            };
-            setActiveSession(session, registered.access);
-            onLoginSuccess?.(session);
-          } catch {
-            const session: UserSession = {
-              username: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail,
-              email: cleanEmail,
-              role: 'CITOYEN',
-              est_responsable_municipal: false,
-              telephone_cin: telephoneCin.trim(),
-            };
-            setActiveSession(session);
-            onLoginSuccess?.(session);
-          }
+          const registered = await registerAccount({
+            email: cleanEmail,
+            password,
+            role: 'CITOYEN',
+            username: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail,
+          });
+          const session: UserSession = {
+            id: registered.user.id,
+            username: registered.user.username,
+            email: registered.user.email,
+            role: 'CITOYEN',
+            est_responsable_municipal: false,
+            telephone_cin: telephoneCin.trim(),
+            token: registered.access,
+          };
+          setActiveSession(session, registered.access);
+          onLoginSuccess?.(session);
         }
 
         setSuccessMsg('Session citoyenne active. Redirection vers le formulaire de signalement...');
         setTimeout(() => navigate('/citoyen'), 300);
 
       } else if (selectedRole === 'PROTECTION_CIVILE') {
-        // Protection Civile (Module collaborateur Étudiant 3)
+        // Protection Civile synchronisée avec PostgreSQL via Django REST
         if (!matriculeAgent.trim()) {
           throw new Error("Le matricule ou badge agent est obligatoire pour accéder au poste d'intervention.");
         }
 
-        const session: UserSession = {
-          username: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail,
-          email: cleanEmail,
-          role: 'PROTECTION_CIVILE',
-          est_responsable_municipal: false,
-          matricule_agent: matriculeAgent.trim(),
-        };
-        setActiveSession(session);
-        onLoginSuccess?.(session);
+        if (authMode === 'LOGIN') {
+          const data = await loginMunicipal(cleanEmail, password);
+          const session: UserSession = {
+            id: data.user.id,
+            username: data.user.username,
+            email: data.user.email,
+            role: 'PROTECTION_CIVILE',
+            est_responsable_municipal: false,
+            matricule_agent: matriculeAgent.trim(),
+            token: data.access,
+          };
+          setActiveSession(session, data.access);
+          onLoginSuccess?.(session);
+        } else {
+          const registered = await registerAccount({
+            email: cleanEmail,
+            password,
+            role: 'PROTECTION_CIVILE',
+            username: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail,
+          });
+          const session: UserSession = {
+            id: registered.user.id,
+            username: registered.user.username,
+            email: registered.user.email,
+            role: 'PROTECTION_CIVILE',
+            est_responsable_municipal: false,
+            matricule_agent: matriculeAgent.trim(),
+            token: registered.access,
+          };
+          setActiveSession(session, registered.access);
+          onLoginSuccess?.(session);
+        }
 
         setSuccessMsg('Session Protection Civile validée. Redirection vers le poste opérationnel...');
         setTimeout(() => navigate('/protection-civile'), 300);
