@@ -182,3 +182,13 @@ REST_FRAMEWORK = {
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ==============================================================================
+# Configuration Géographique Centralisée (Cap Bon / Gouvernorat de Nabeul)
+# ==============================================================================
+from config.geo_config import SPATIAL_CONFIG, get_public_geo_config  # noqa: E402
+
+SMARTCITY_GEO = get_public_geo_config()
+URGENCES_RAYON_PROXIMITE_METRES = SPATIAL_CONFIG['urgences_rayon_proximite_metres']
+URGENCES_FENETRE_TEMPORELLE_MINUTES = SPATIAL_CONFIG['urgences_fenetre_minutes']
+URGENCES_SEUIL_CONFIRMATION = SPATIAL_CONFIG['urgences_seuil_confirmation']

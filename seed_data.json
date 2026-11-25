@@ -54,10 +54,10 @@
   "model": "urgences.signalementaccident",
   "pk": 1,
   "fields": {
-    "latitude": 36.86,
-    "longitude": 10.165,
-    "adresse": "Route de Bizerte (GP8), Ariana Ouest",
-    "description": "Accident de la circulation avec blessés - Route de Bizerte (GP8), Ariana Ouest",
+    "latitude": 36.8475,
+    "longitude": 11.0939,
+    "adresse": "Avenue des Martyrs, Kélibia Centre",
+    "description": "Accident de la circulation avec blessés - Avenue des Martyrs, Kélibia Centre",
     "gravite_estimee": "GRAVE",
     "date_creation": "2026-11-25T15:30:59.685Z"
   }
@@ -66,9 +66,9 @@
   "model": "urgences.alerteaccident",
   "pk": 1,
   "fields": {
-    "latitude": 36.86,
-    "longitude": 10.165,
-    "adresse": "Route de Bizerte (GP8), Ariana Ouest",
+    "latitude": 36.8475,
+    "longitude": 11.0939,
+    "adresse": "Avenue des Martyrs, Kélibia Centre",
     "gravite": "GRAVE",
     "statut": "CLOTURE",
     "nb_signalements": 1,

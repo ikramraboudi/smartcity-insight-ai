@@ -2,28 +2,17 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   X,
-  Activity,
-  CloudRain,
-  Construction,
-  AlertTriangle,
-  Zap,
   Bot,
   Sparkles,
   Send,
-  MapPin,
-  Flame,
-  CheckCircle2,
-  Sliders,
   Layers,
-  HelpCircle,
 } from 'lucide-react';
+import { getGeoConfig } from '../config/geoConfig';
 import {
-  predictRiskMap,
-  fetchLiveRiskTrafficIndex,
   fetchZonesRiskMap,
   askAssistantLLM,
 } from '../services/api';
-import type { RiskMapResult, ZoneRiskMap, AssistantLLMResponse } from '../types';
+import type { ZoneRiskMap } from '../types';
 
 interface RiskMapModalProps {
   isOpen: boolean;
@@ -31,10 +20,11 @@ interface RiskMapModalProps {
 }
 
 export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) => {
-  // Navigation par onglets : 'zones' | 'assistant' | 'custom_ml'
-  const [activeTab, setActiveTab] = useState<'zones' | 'assistant' | 'custom_ml'>('zones');
+  const geoCfg = getGeoConfig();
+  // Navigation par onglets : 'zones' | 'assistant'
+  const [activeTab, setActiveTab] = useState<'zones' | 'assistant'>('zones');
 
-  // État Onglet 1 : Secteurs Tunis
+  // État Onglet 1 : Secteurs régionaux
   const [zones, setZones] = useState<ZoneRiskMap[]>([]);
   const [loadingZones, setLoadingZones] = useState<boolean>(false);
   const [selectedZone, setSelectedZone] = useState<ZoneRiskMap | null>(null);
@@ -45,21 +35,12 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
   >([
     {
       sender: 'assistant',
-      text: "Bonjour. Je suis l'**Assistant IA Décisionnel** de la Protection Civile de Tunis.\nJe m'appuie strictement sur les données réelles (accidents BDD, congestion connectée, carrefours sensibles).\n\nPosez une question ou cliquez sur l'une des suggestions ci-dessous.",
+      text: `Bonjour. Je suis l'**Assistant IA Décisionnel** de la Protection Civile du ${geoCfg.region_name}.\nJe m'appuie strictement sur les données réelles (accidents BDD, congestion connectée, axes sensibles).\n\nPosez une question ou cliquez sur l'une des suggestions ci-dessous.`,
       moteur: 'RAG Strict Anti-Hallucination',
     },
   ]);
   const [questionInput, setQuestionInput] = useState<string>('');
   const [llmLoading, setLlmLoading] = useState<boolean>(false);
-
-  // État Onglet 3 : Simulateur paramétrique ML
-  const [traficIndex, setTraficIndex] = useState(2.8);
-  const [presenceTravaux, setPresenceTravaux] = useState(1);
-  const [meteoPluie, setMeteoPluie] = useState(0);
-  const [incidentsRecents, setIncidentsRecents] = useState(3);
-  const [customLoading, setCustomLoading] = useState(false);
-  const [syncingTrafic, setSyncingTrafic] = useState(false);
-  const [customResult, setCustomResult] = useState<RiskMapResult | null>(null);
 
   // Charger les zones au montage et à l'ouverture
   useEffect(() => {
@@ -77,38 +58,6 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  // Calcul du simulateur paramétrique
-  const handlePredict = async () => {
-    setCustomLoading(true);
-    try {
-      const data = await predictRiskMap({
-        trafic_index: traficIndex,
-        presence_travaux: presenceTravaux,
-        meteo_pluie: meteoPluie,
-        incidents_recents: incidentsRecents,
-      });
-      setCustomResult(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setCustomLoading(false);
-    }
-  };
-
-  const handleSyncTrafic = async () => {
-    setSyncingTrafic(true);
-    try {
-      const liveIdx = await fetchLiveRiskTrafficIndex();
-      if (liveIdx !== null) {
-        setTraficIndex(Number(liveIdx.toFixed(1)));
-      }
-    } catch (err) {
-      console.error('Erreur synchronisation trafic:', err);
-    } finally {
-      setSyncingTrafic(false);
-    }
-  };
 
   // Envoi d'une question à l'Assistant LLM
   const handleAskQuestion = async (queryText?: string) => {
@@ -142,12 +91,6 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 70) return '#ef4444';
-    if (score >= 35) return '#f59e0b';
-    return '#10b981';
-  };
-
   const getCouleurBadge = (couleur: 'vert' | 'orange' | 'rouge') => {
     switch (couleur) {
       case 'rouge':
@@ -161,7 +104,7 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
 
   const suggestedQuestions = [
     "Quelles sont les zones rouges prioritaires ?",
-    "Pourquoi Bab Alioua est-elle classée zone rouge ?",
+    "Pourquoi El Haouaria ou Menzel Horr présente un risque élevé ?",
     "Quelles sont les alertes actives en cours ?",
     "Quelles casernes et ambulances sont disponibles ?",
   ];
@@ -227,7 +170,7 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
                 Centre Risk Map & Assistant IA Décisionnel
               </h3>
               <p style={{ fontSize: '11px', color: '#94a3b8', margin: 0 }}>
-                Grand Tunis • Prédiction multi-sources (Accidents + Trafic + Géométrie)
+                {geoCfg.region_name} • Prédiction multi-sources (Accidents + Trafic + Géométrie)
               </p>
             </div>
           </div>
@@ -274,7 +217,7 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
             }}
           >
             <Layers size={16} />
-            <span>Secteurs du Grand Tunis ({zones.length})</span>
+            <span>Secteurs du {geoCfg.region_short_name} ({zones.length})</span>
           </button>
 
           <button
@@ -308,39 +251,18 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
               Anti-Hallucination
             </span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('custom_ml')}
-            style={{
-              padding: '12px 16px',
-              border: 'none',
-              background: 'none',
-              color: activeTab === 'custom_ml' ? '#f59e0b' : '#94a3b8',
-              borderBottom: activeTab === 'custom_ml' ? '2px solid #f59e0b' : '2px solid transparent',
-              fontWeight: 700,
-              fontSize: '13px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <Sliders size={16} />
-            <span>Simulateur Random Forest</span>
-          </button>
         </div>
 
         {/* Corps des onglets */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
           {/* ========================================================================= */}
-          {/* ONGLET 1 : Cartographie des Secteurs réels du Grand Tunis                   */}
+          {/* ONGLET 1 : Cartographie des Secteurs réels du Cap Bon                     */}
           {/* ========================================================================= */}
           {activeTab === 'zones' && (
             <div>
               <div style={{ marginBottom: 14 }}>
                 <h4 style={{ color: '#f8fafc', fontSize: 14, margin: '0 0 4px 0' }}>
-                  Évaluation continue du risque routier sur Tunis
+                  Évaluation continue du risque routier sur le {geoCfg.region_short_name}
                 </h4>
                 <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
                   Barème officiel : <span style={{ color: '#34d399' }}>Vert &lt; 35%</span> •{' '}
@@ -512,7 +434,7 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
               >
                 <input
                   type="text"
-                  placeholder="Posez une question décisionnelle sur le réseau de Tunis..."
+                  placeholder={`Posez une question décisionnelle sur le réseau du ${geoCfg.region_short_name}...`}
                   value={questionInput}
                   onChange={(e) => setQuestionInput(e.target.value)}
                   style={{
@@ -547,212 +469,6 @@ export const RiskMapModal: React.FC<RiskMapModalProps> = ({ isOpen, onClose }) =
                   <span>Envoyer</span>
                 </button>
               </form>
-            </div>
-          )}
-
-          {/* ========================================================================= */}
-          {/* ONGLET 3 : Simulateur Paramétrique Random Forest                           */}
-          {/* ========================================================================= */}
-          {activeTab === 'custom_ml' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', marginBottom: '6px' }}>
-                  <span style={{ color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Activity size={15} color="#38bdf8" /> Indice de Trafic (1.0 = fluide, 5.0 = congestion)
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button
-                      type="button"
-                      onClick={handleSyncTrafic}
-                      disabled={syncingTrafic}
-                      style={{
-                        backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                        border: '1px solid rgba(56, 189, 248, 0.35)',
-                        borderRadius: '4px',
-                        color: '#38bdf8',
-                        fontSize: '11px',
-                        padding: '3px 8px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {syncingTrafic ? 'Synchro...' : '⚡ Sync Trafic Live'}
-                    </button>
-                    <strong style={{ color: '#38bdf8' }}>{traficIndex} / 5</strong>
-                  </div>
-                </div>
-                <input
-                  type="range"
-                  min="1.0"
-                  max="5.0"
-                  step="0.1"
-                  value={traficIndex}
-                  onChange={(e) => setTraficIndex(parseFloat(e.target.value))}
-                  style={{ width: '100%', accentColor: '#38bdf8' }}
-                />
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
-                  <span style={{ color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Construction size={15} color="#f59e0b" /> Présence de Chantiers / Travaux
-                  </span>
-                  <strong style={{ color: '#f59e0b' }}>{presenceTravaux === 1 ? 'OUI' : 'NON'}</strong>
-                </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={() => setPresenceTravaux(0)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      borderRadius: '6px',
-                      border: '1px solid #334155',
-                      backgroundColor: presenceTravaux === 0 ? '#1e293b' : 'transparent',
-                      color: presenceTravaux === 0 ? '#f8fafc' : '#94a3b8',
-                      fontWeight: presenceTravaux === 0 ? 600 : 400,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Non (Voie libre)
-                  </button>
-                  <button
-                    onClick={() => setPresenceTravaux(1)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      borderRadius: '6px',
-                      border: '1px solid #334155',
-                      backgroundColor: presenceTravaux === 1 ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
-                      color: presenceTravaux === 1 ? '#fcd34d' : '#94a3b8',
-                      fontWeight: presenceTravaux === 1 ? 600 : 400,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Oui (Chantiers actifs)
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
-                  <span style={{ color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CloudRain size={15} color="#60a5fa" /> Météo Pluvieuse
-                  </span>
-                  <strong style={{ color: '#60a5fa' }}>{meteoPluie === 1 ? 'OUI' : 'NON'}</strong>
-                </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={() => setMeteoPluie(0)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      borderRadius: '6px',
-                      border: '1px solid #334155',
-                      backgroundColor: meteoPluie === 0 ? '#1e293b' : 'transparent',
-                      color: meteoPluie === 0 ? '#38bdf8' : '#94a3b8',
-                      fontWeight: meteoPluie === 0 ? 600 : 400,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Sec / Beau temps
-                  </button>
-                  <button
-                    onClick={() => setMeteoPluie(1)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      borderRadius: '6px',
-                      border: '1px solid #334155',
-                      backgroundColor: meteoPluie === 1 ? 'rgba(96, 165, 250, 0.2)' : 'transparent',
-                      color: meteoPluie === 1 ? '#93c5fd' : '#94a3b8',
-                      fontWeight: meteoPluie === 1 ? 600 : 400,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Pluie / Chaussée glissante
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
-                  <span style={{ color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <AlertTriangle size={15} color="#ef4444" /> Incidents ou signalements récents (30j)
-                  </span>
-                  <strong style={{ color: '#ef4444' }}>{incidentsRecents}</strong>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="10"
-                  step="1"
-                  value={incidentsRecents}
-                  onChange={(e) => setIncidentsRecents(parseInt(e.target.value, 10))}
-                  style={{ width: '100%', accentColor: '#ef4444' }}
-                />
-              </div>
-
-              <button
-                onClick={handlePredict}
-                disabled={customLoading}
-                style={{
-                  width: '100%',
-                  backgroundColor: '#ef4444',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '11px',
-                  color: '#fff',
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  cursor: customLoading ? 'not-allowed' : 'pointer',
-                  opacity: customLoading ? 0.7 : 1,
-                }}
-              >
-                {customLoading ? 'Calcul en cours par le modèle...' : '⚡ Évaluer le Risque Personnalisé'}
-              </button>
-
-              {customResult && (
-                <div
-                  style={{
-                    backgroundColor: 'rgba(15, 23, 42, 0.8)',
-                    border: `1px solid ${getScoreColor(customResult.score_risque_pourcentage)}`,
-                    borderRadius: '8px',
-                    padding: '14px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <div>
-                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Score de risque calculé :</span>
-                      <div style={{ fontSize: '24px', fontWeight: 800, color: getScoreColor(customResult.score_risque_pourcentage) }}>
-                        {customResult.score_risque_pourcentage} %
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        padding: '4px 12px',
-                        borderRadius: '16px',
-                        backgroundColor: `${getScoreColor(customResult.score_risque_pourcentage)}22`,
-                        color: getScoreColor(customResult.score_risque_pourcentage),
-                        fontWeight: 700,
-                        fontSize: '12px',
-                        border: `1px solid ${getScoreColor(customResult.score_risque_pourcentage)}`,
-                      }}
-                    >
-                      {customResult.niveau_risk_map}
-                    </div>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid #1e293b', paddingTop: '8px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#cbd5e1' }}>
-                      Facteurs explicatifs identifiés :
-                    </span>
-                    <ul style={{ paddingLeft: '16px', margin: '4px 0 0 0', fontSize: '12px', color: '#cbd5e1' }}>
-                      {customResult.facteurs_explicatifs.map((f, idx) => (
-                        <li key={idx} style={{ marginBottom: '2px' }}>{f}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>

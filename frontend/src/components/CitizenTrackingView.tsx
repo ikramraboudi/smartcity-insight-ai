@@ -11,6 +11,12 @@ import {
   ShieldCheck,
   UserCheck,
 } from 'lucide-react';
+import {
+  addStandardBasemapLayer,
+  getGeoConfig,
+  getRegionLeafletBounds,
+  renderLocalityLabelsLayer,
+} from '../config/geoConfig';
 import { BACKEND_URL, getActiveSession, getSavedCitizenReportIds, getSignalements } from '../services/api';
 import { CategorieSignalement, Signalement, StatutSignalement } from '../types';
 
@@ -106,27 +112,31 @@ export const CitizenTrackingView: React.FC<CitizenTrackingViewProps> = ({ highli
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    const tunisBounds = L.latLngBounds(L.latLng(36.4, 9.8), L.latLng(37.2, 10.6));
+    const geoCfg = getGeoConfig();
+    const regionBounds = getRegionLeafletBounds(geoCfg);
     const map = L.map(mapContainerRef.current, {
-      center: [36.8065, 10.1815],
-      zoom: 12,
-      minZoom: 11,
-      maxZoom: 18,
-      maxBounds: tunisBounds,
-      maxBoundsViscosity: 0.85,
+      center: geoCfg.map.center,
+      zoom: geoCfg.map.zoom,
+      minZoom: geoCfg.map.min_zoom,
+      maxZoom: geoCfg.map.max_zoom,
+      maxBounds: regionBounds,
+      maxBoundsViscosity: 1.0,
     });
 
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(map);
+    addStandardBasemapLayer(map);
+
+    const labelsLayer = L.layerGroup().addTo(map);
+    renderLocalityLabelsLayer(labelsLayer, geoCfg.delegations);
 
     markersLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
     const ro = new ResizeObserver(() => map.invalidateSize());
     ro.observe(mapContainerRef.current);
-    const t = setTimeout(() => map.invalidateSize(), 150);
+    const t = setTimeout(() => {
+      map.invalidateSize();
+      map.fitBounds(regionBounds, { padding: [20, 20] });
+    }, 150);
 
     return () => {
       clearTimeout(t);
@@ -366,7 +376,7 @@ export const CitizenTrackingView: React.FC<CitizenTrackingViewProps> = ({ highli
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700 }}>
               <MapPin size={16} color="#38bdf8" />
-              <span>Carte Citoyenne du Grand Tunis</span>
+              <span>Carte Citoyenne du {getGeoConfig().region_short_name}</span>
             </div>
             <span style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>
               {displayedSignalements.length} incident(s)

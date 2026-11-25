@@ -10,6 +10,7 @@ from urgences.views import (
     lister_zones_risk_map,
     lister_alertes,
     lister_casernes,
+    obtenir_geo_config,
     simuler_accident,
     assistant_llm_decisionnel,
     endpoint_simulation_urgences,
@@ -22,6 +23,7 @@ urlpatterns = [
     path('api/signalements/', include('signalements.urls')),
 
     # Module Urgences & Protection Civile (Étudiant 3)
+    path('api/urgences/geo-config/', obtenir_geo_config, name='obtenir_geo_config'),
     path('api/urgences/alertes/', lister_alertes, name='lister_alertes'),
     path('api/urgences/casernes/', lister_casernes, name='lister_casernes'),
     path('api/urgences/simuler-accident/', simuler_accident, name='simuler_accident'),

@@ -1,4 +1,5 @@
 import React from 'react';
+import { getGeoConfig } from '../config/geoConfig';
 import {
   Flame,
   Volume2,
@@ -67,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h1 style={{ fontSize: '17px', fontWeight: 800, letterSpacing: '0.02em', color: '#f8fafc', margin: 0 }}>
-              PROTECTION CIVILE DE TUNIS
+              PROTECTION CIVILE DE {getGeoConfig().region_short_name.toUpperCase()}
             </h1>
             <span
               style={{
@@ -87,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
           <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span>Centre de Commandement Opérationnel & Dispatching des Secours</span>
             <span style={{ color: '#475569' }}>•</span>
-            <span style={{ color: '#38bdf8', fontWeight: 500 }}>Grand Tunis</span>
+            <span style={{ color: '#38bdf8', fontWeight: 500 }}>{getGeoConfig().region_name}</span>
           </p>
         </div>
       </div>
@@ -172,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Traffic Toggle Button */}
         <button
           onClick={onToggleTraffic}
-          title="Afficher le trafic routier simulé en direct sur le Grand Tunis (Port 8001)"
+          title={`Afficher le trafic routier simulé en direct sur le ${getGeoConfig().region_short_name} (Port 8001)`}
           style={{
             backgroundColor: trafficLayerActive ? 'rgba(16, 185, 129, 0.18)' : '#1e293b',
             border: `1px solid ${trafficLayerActive ? '#10b981' : '#334155'}`,
@@ -207,7 +208,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Risk Map IA Button */}
         <button
           onClick={onOpenRiskMapModal}
-          title="Évaluer le risque avec le modèle Machine Learning (Random Forest)"
+          title="Centre Risk Map & Assistant IA Décisionnel"
           style={{
             backgroundColor: '#1e293b',
             border: '1px solid #334155',

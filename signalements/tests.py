@@ -83,11 +83,11 @@ class PrivacyBlurServiceTest(TestCase):
         signalement = Signalement.objects.create(
             categorie=Signalement.Categorie.NID_DE_POULE,
             gravite=Signalement.Gravite.MOYENNE,
-            description="Nid-de-poule dangereux avenue Habib Bourguiba",
-            latitude=36.8005,
-            longitude=10.1800,
-            adresse_texte="Avenue Habib Bourguiba, Tunis",
-            quartier="Centre-Ville Tunis",
+            description="Nid-de-poule dangereux avenue des Martyrs, Kélibia",
+            latitude=36.8475,
+            longitude=11.0939,
+            adresse_texte="Avenue des Martyrs, Kélibia",
+            quartier="Kélibia",
             photo_floutee=uploaded,
         )
 
@@ -110,9 +110,9 @@ class PrivacyBlurServiceTest(TestCase):
             categorie=Signalement.Categorie.ECLAIRAGE,
             gravite=Signalement.Gravite.FAIBLE,
             description="Lampadaire éteint",
-            latitude=36.8100,
-            longitude=10.1700,
-            adresse_texte="Rue de Rome, Tunis",
+            latitude=36.8906,
+            longitude=11.1197,
+            adresse_texte="Route Côtière C27, Hammam El Ghezaz",
         )
         self.assertFalse(signalement.visages_plaques_floutes)
         self.assertEqual(signalement.nb_zones_floutees, 0)
@@ -143,10 +143,10 @@ class SignalementAPITest(TestCase):
             'categorie': 'NID_DE_POULE',
             'gravite': 'MOYENNE',
             'description': 'Nid-de-poule signalé via application mobile citoyenne',
-            'latitude': 36.8000,
-            'longitude': 10.1800,
-            'adresse_texte': 'Avenue Habib Bourguiba, Tunis',
-            'quartier': 'Centre-Ville Tunis',
+            'latitude': 36.8475,
+            'longitude': 11.0939,
+            'adresse_texte': 'Avenue des Martyrs, Kélibia',
+            'quartier': 'Kélibia',
             'photo_floutee': photo,
         }
 
@@ -156,7 +156,7 @@ class SignalementAPITest(TestCase):
         data = response.json()
         self.assertIn('id', data)
         self.assertEqual(data['categorie'], 'NID_DE_POULE')
-        self.assertEqual(data['quartier'], 'Centre-Ville Tunis')
+        self.assertEqual(data['quartier'], 'Kélibia')
         self.assertEqual(data['statut'], 'EN_ATTENTE')
         self.assertTrue(data['visages_plaques_floutes'])
         self.assertGreaterEqual(data['nb_zones_floutees'], 1)
@@ -175,10 +175,10 @@ class SignalementAPITest(TestCase):
             'categorie': 'ACCIDENT',
             'gravite': 'ELEVEE',
             'description': 'Accident léger sur la voie publique',
-            'latitude': 36.8120,
-            'longitude': 10.1780,
-            'adresse_texte': 'Bab El Khadra, Tunis',
-            'quartier': 'Bab El Khadra',
+            'latitude': 36.9350,
+            'longitude': 11.1050,
+            'adresse_texte': 'Traverse C27, Dar Allouche',
+            'quartier': 'Dar Allouche',
         }
 
         # Les 5 premiers signalements doivent être acceptés (201 Created)
@@ -202,25 +202,25 @@ class SignalementAPITest(TestCase):
         """Vérifie le filtrage de l'API par quartier, statut et catégorie."""
         Signalement.objects.create(
             categorie=Signalement.Categorie.DECHETS,
-            latitude=36.81,
-            longitude=10.18,
-            quartier="Lafayette",
+            latitude=36.8906,
+            longitude=11.1197,
+            quartier="Hammam El Ghezaz",
             statut=Signalement.Statut.EN_ATTENTE,
         )
         Signalement.objects.create(
             categorie=Signalement.Categorie.ECLAIRAGE,
-            latitude=36.82,
-            longitude=10.19,
-            quartier="Centre-Ville Tunis",
+            latitude=36.8475,
+            longitude=11.0939,
+            quartier="Kélibia",
             statut=Signalement.Statut.RESOLU,
         )
 
-        # Filtre par quartier
-        res_quartier = self.client.get('/api/signalements/?quartier=Lafayette')
+        # Filtre par localité
+        res_quartier = self.client.get('/api/signalements/?quartier=Hammam%20El%20Ghezaz')
         self.assertEqual(res_quartier.status_code, status.HTTP_200_OK)
         items = res_quartier.json()
         self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]['quartier'], 'Lafayette')
+        self.assertEqual(items[0]['quartier'], 'Hammam El Ghezaz')
 
         # Filtre par statut
         res_statut = self.client.get('/api/signalements/?statut=RESOLU')
@@ -244,7 +244,7 @@ class SignalementSecurityPermissionsTest(TestCase):
 
         # 1. Création d'un utilisateur Citoyen (profil CITOYEN créé automatiquement par signal)
         self.citoyen = User.objects.create_user(
-            username='citoyen_tunis',
+            username='citoyen_capbon',
             password='CitoyenPassword123!'
         )
 
@@ -260,11 +260,11 @@ class SignalementSecurityPermissionsTest(TestCase):
         self.signalement = Signalement.objects.create(
             categorie=Signalement.Categorie.NID_DE_POULE,
             gravite=Signalement.Gravite.ELEVEE,
-            description="Affaissement chaussée avenue Mohammed V",
-            latitude=36.8065,
-            longitude=10.1815,
-            adresse_texte="Avenue Mohammed V, Tunis",
-            quartier="Centre-Ville Tunis",
+            description="Affaissement chaussée avenue des Martyrs",
+            latitude=36.8475,
+            longitude=11.0939,
+            adresse_texte="Avenue des Martyrs, Kélibia",
+            quartier="Kélibia",
             ip_emetteur="196.200.10.50",
         )
 
@@ -325,9 +325,9 @@ class SignalementSecurityPermissionsTest(TestCase):
             'categorie': 'DECHETS',
             'gravite': 'MOYENNE',
             'description': 'Dépôt de déchets sur le trottoir',
-            'latitude': 36.8150,
-            'longitude': 10.1850,
-            'quartier': 'Lafayette',
+            'latitude': 37.0500,
+            'longitude': 11.0144,
+            'quartier': 'El Haouaria',
             'statut': 'RESOLU',  # Tentative d'élévation de privilège à ignorer
         }
         res_create = self.client.post('/api/signalements/', payload, format='json')
@@ -431,7 +431,7 @@ class SignalementSecurityPermissionsTest(TestCase):
         # 2. Connexion Citoyen -> token avec role=CITOYEN, bloqué (403) sur /statistiques/
         res_cit = self.client.post(
             '/api/signalements/auth/login/',
-            {'username': 'citoyen_tunis', 'password': 'CitoyenPassword123!'},
+            {'username': 'citoyen_capbon', 'password': 'CitoyenPassword123!'},
             format='json',
         )
         self.assertEqual(res_cit.status_code, status.HTTP_200_OK)
@@ -506,11 +506,11 @@ class SignalementProtectionCivileSyncIntegrationTest(TestCase):
         payload = {
             'categorie': 'ACCIDENT',
             'gravite': 'CRITIQUE',
-            'description': 'Collision frontale avenue Habib Bourguiba avec blessés',
-            'latitude': 36.8005,
-            'longitude': 10.1800,
-            'adresse_texte': 'Avenue Habib Bourguiba, Tunis',
-            'quartier': 'Centre-Ville Tunis',
+            'description': 'Collision frontale avenue des Martyrs avec blessés',
+            'latitude': 36.8475,
+            'longitude': 11.0939,
+            'adresse_texte': 'Avenue des Martyrs, Kélibia',
+            'quartier': 'Kélibia',
         }
         res = self.client.post('/api/signalements/', payload, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
@@ -526,8 +526,8 @@ class SignalementProtectionCivileSyncIntegrationTest(TestCase):
         self.assertEqual(alerte.gravite, 'GRAVE')
         self.assertEqual(alerte.statut, 'CONFIRME')
         self.assertGreaterEqual(alerte.signalements_lies.count(), 1)
-        self.assertAlmostEqual(alerte.latitude, 36.8005, places=3)
-        self.assertAlmostEqual(alerte.longitude, 10.1800, places=3)
+        self.assertAlmostEqual(alerte.latitude, 36.8475, places=3)
+        self.assertAlmostEqual(alerte.longitude, 11.0939, places=3)
 
         # 3. Vérification de l'inscription au journal d'audit
         from urgences.models import JournalAudit
@@ -542,10 +542,10 @@ class SignalementProtectionCivileSyncIntegrationTest(TestCase):
         payload = {
             'categorie': 'DECHETS',
             'gravite': 'FAIBLE',
-            'description': 'Poubelle débordante près du parc',
-            'latitude': 36.8150,
-            'longitude': 10.1750,
-            'quartier': 'Lafayette',
+            'description': 'Poubelle débordante près du site archéologique',
+            'latitude': 36.9467,
+            'longitude': 11.0989,
+            'quartier': 'Kerkouane',
         }
         res = self.client.post('/api/signalements/', payload, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
@@ -566,9 +566,9 @@ class SignalementProtectionCivileSyncIntegrationTest(TestCase):
             categorie=Signalement.Categorie.ACCIDENT,
             gravite=Signalement.Gravite.ELEVEE,
             description="Véhicule en panne bloquant les voies",
-            latitude=36.8200,
-            longitude=10.1900,
-            quartier="Montplaisir",
+            latitude=36.7361,
+            longitude=10.9558,
+            quartier="Menzel Horr",
         )
         self.assertIsNotNone(signalement.alerte_liee)
         alerte = signalement.alerte_liee
@@ -606,10 +606,10 @@ class SignalementProtectionCivileSyncIntegrationTest(TestCase):
         signalement = Signalement.objects.create(
             categorie=Signalement.Categorie.ACCIDENT,
             gravite=Signalement.Gravite.CRITIQUE,
-            description="Accident grave Route de la Marsa",
-            latitude=36.8520,
-            longitude=10.2780,
-            quartier="La Goulette",
+            description="Accident grave Route du Port de Kélibia",
+            latitude=36.8475,
+            longitude=11.0939,
+            quartier="Kélibia",
         )
         alerte = signalement.alerte_liee
         self.assertIsNotNone(alerte)
@@ -658,24 +658,24 @@ class SignalementAntiAbuseAndCitizenTrackingTest(TestCase):
         payload_base = {
             'categorie': 'NID_DE_POULE',
             'gravite': 'MOYENNE',
-            'description': 'Nid-de-poule profond rue de Marseille',
-            'latitude': 36.8050,
-            'longitude': 10.1810,
-            'quartier': 'Centre-Ville Tunis',
+            'description': 'Nid-de-poule profond avenue des Martyrs',
+            'latitude': 36.8475,
+            'longitude': 11.0939,
+            'quartier': 'Kélibia',
         }
         res1 = self.client.post('/api/signalements/', payload_base, format='json', REMOTE_ADDR='196.10.20.30')
         self.assertEqual(res1.status_code, status.HTTP_201_CREATED)
         first_id = res1.json()['id']
 
         # Doublon à ~14 mètres (< 50 m) dans les 10 minutes -> 409 Conflict
-        payload_dup = {**payload_base, 'latitude': 36.8051, 'longitude': 10.1811}
+        payload_dup = {**payload_base, 'latitude': 36.8476, 'longitude': 11.0940}
         res_dup = self.client.post('/api/signalements/', payload_dup, format='json', REMOTE_ADDR='196.10.20.30')
         self.assertEqual(res_dup.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(res_dup.json()['code'], 'DUPLICATE_REPORT')
         self.assertEqual(res_dup.json()['doublon_id'], first_id)
 
         # Signalement suffisamment éloigné (~150 m) -> 201 Created
-        payload_far = {**payload_base, 'latitude': 36.8065, 'longitude': 10.1810}
+        payload_far = {**payload_base, 'latitude': 36.8490, 'longitude': 11.0939}
         res_far = self.client.post('/api/signalements/', payload_far, format='json', REMOTE_ADDR='196.10.20.30')
         self.assertEqual(res_far.status_code, status.HTTP_201_CREATED)
 
@@ -695,9 +695,9 @@ class SignalementAntiAbuseAndCitizenTrackingTest(TestCase):
                     'categorie': 'ECLAIRAGE',
                     'gravite': 'FAIBLE',
                     'description': f'Lampadaire éteint #{i}',
-                    'latitude': 36.8000 + (i * 0.002),
-                    'longitude': 10.1800,
-                    'quartier': 'Lafayette',
+                    'latitude': 36.8906 + (i * 0.002),
+                    'longitude': 11.1197,
+                    'quartier': 'Hammam El Ghezaz',
                 },
                 format='json',
                 REMOTE_ADDR=shared_ip,
@@ -712,9 +712,9 @@ class SignalementAntiAbuseAndCitizenTrackingTest(TestCase):
                 'categorie': 'DECHETS',
                 'gravite': 'MOYENNE',
                 'description': 'Conteneur plein',
-                'latitude': 36.8300,
-                'longitude': 10.1900,
-                'quartier': 'Montplaisir',
+                'latitude': 36.8260,
+                'longitude': 11.0180,
+                'quartier': 'Azmour',
             },
             format='json',
             REMOTE_ADDR=shared_ip,
@@ -746,51 +746,51 @@ class DashboardAnalyticsFilterAndAggregationTest(TestCase):
         cache.clear()
         self.client = APIClient()
         self.responsable = User.objects.create_user(
-            username='resp_phase2', password='Pwd!123456', email='resp2@tunis.tn'
+            username='resp_phase2', password='Pwd!123456', email='resp2@capbon.tn'
         )
         self.responsable.profil.role = UserRole.RESPONSABLE_MUNICIPAL
         self.responsable.profil.save()
         self.citoyen = User.objects.create_user(
-            username='cit_phase2', password='Pwd!123456', email='cit2@tunis.tn'
+            username='cit_phase2', password='Pwd!123456', email='cit2@capbon.tn'
         )
 
-        # Jeu de données varié en statuts, gravités, catégories, quartiers et dates
+        # Jeu de données varié en statuts, gravités, catégories, localités et dates
         self.s1 = Signalement.objects.create(
             categorie=Signalement.Categorie.NID_DE_POULE,
             gravite=Signalement.Gravite.CRITIQUE,
             statut=Signalement.Statut.EN_COURS,
-            description='Chaussée affaissée Avenue Bourguiba',
-            latitude=36.8002,
-            longitude=10.1815,
-            quartier='Centre-Ville Tunis',
+            description='Chaussée affaissée El Haouaria',
+            latitude=37.0500,
+            longitude=11.0144,
+            quartier='El Haouaria',
         )
         self.s2 = Signalement.objects.create(
             categorie=Signalement.Categorie.NID_DE_POULE,
             gravite=Signalement.Gravite.ELEVEE,
             statut=Signalement.Statut.CONFIRME,
-            description='Trou profond rue de Marseille',
-            latitude=36.8010,
-            longitude=10.1822,
-            quartier='Centre-Ville Tunis',
+            description='Trou profond route des Grottes El Haouaria',
+            latitude=37.0510,
+            longitude=11.0152,
+            quartier='El Haouaria',
         )
         self.s3 = Signalement.objects.create(
             categorie=Signalement.Categorie.ECLAIRAGE,
             gravite=Signalement.Gravite.FAIBLE,
             statut=Signalement.Statut.RESOLU,
-            description='Ampoule grillée Ariana',
-            latitude=36.8625,
-            longitude=10.1955,
-            quartier='Ariana Centre',
+            description='Ampoule grillée Kélibia',
+            latitude=36.8475,
+            longitude=11.0939,
+            quartier='Kélibia',
         )
         # Signalement ancien (> 12 jours) pour tester le filtre période 7j
         old_sig = Signalement.objects.create(
             categorie=Signalement.Categorie.DECHETS,
             gravite=Signalement.Gravite.CRITIQUE,
             statut=Signalement.Statut.EN_ATTENTE,
-            description='Dépôt sauvage ancien Ariana',
-            latitude=36.8630,
-            longitude=10.1960,
-            quartier='Ariana Centre',
+            description='Dépôt sauvage ancien Kélibia',
+            latitude=36.8480,
+            longitude=11.0942,
+            quartier='Kélibia',
         )
         Signalement.objects.filter(pk=old_sig.pk).update(
             date_creation=timezone.now() - timedelta(days=12)
@@ -837,12 +837,36 @@ class DashboardAnalyticsFilterAndAggregationTest(TestCase):
         self.assertEqual(res_crit.json()['total_signalements'], 1)
         self.assertEqual(res_crit.json()['chantiers_actifs'], 1)
 
-        # Filtre par quartier
-        res_ariana = self.client.get(
-            '/api/signalements/statistiques/?quartier=Ariana%20Centre'
+        # Filtre par délégation
+        res_kelibia = self.client.get(
+            '/api/signalements/statistiques/?quartier=K%C3%A9libia'
         )
-        self.assertEqual(res_ariana.status_code, status.HTTP_200_OK)
-        self.assertEqual(res_ariana.json()['total_signalements'], 2)
+        self.assertEqual(res_kelibia.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_kelibia.json()['total_signalements'], 2)
+
+    def test_responsable_can_delete_signalement_rbac(self):
+        target_id = str(self.s3.id)
+
+        # Anonyme refusé
+        self.client.force_authenticate(user=None)
+        res_anon = self.client.delete(f'/api/signalements/{target_id}/')
+        self.assertIn(
+            res_anon.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+        self.assertTrue(Signalement.objects.filter(pk=target_id).exists())
+
+        # Citoyen refusé (403)
+        self.client.force_authenticate(user=self.citoyen)
+        res_cit = self.client.delete(f'/api/signalements/{target_id}/')
+        self.assertEqual(res_cit.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Signalement.objects.filter(pk=target_id).exists())
+
+        # Responsable Municipal autorisé (204)
+        self.client.force_authenticate(user=self.responsable)
+        res_del = self.client.delete(f'/api/signalements/{target_id}/')
+        self.assertEqual(res_del.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Signalement.objects.filter(pk=target_id).exists())
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
@@ -858,62 +882,62 @@ class IsolationForestAnomalyDetectionTest(TestCase):
         cache.clear()
         self.client = APIClient()
         self.responsable = User.objects.create_user(
-            username='resp_ml', password='Pwd!123456', email='resp_ml@tunis.tn'
+            username='resp_ml', password='Pwd!123456', email='resp_ml@capbon.tn'
         )
         self.responsable.profil.role = UserRole.RESPONSABLE_MUNICIPAL
         self.responsable.profil.save()
         self.citoyen = User.objects.create_user(
-            username='cit_ml', password='Pwd!123456', email='cit_ml@tunis.tn'
+            username='cit_ml', password='Pwd!123456', email='cit_ml@capbon.tn'
         )
 
     def test_no_false_positive_on_isolated_or_sparse_reports(self):
-        # 1. Incident isolé à El Manar (< 3)
+        # 1. Incident isolé à Azmour (< 3)
         Signalement.objects.create(
             categorie=Signalement.Categorie.ECLAIRAGE,
             gravite=Signalement.Gravite.FAIBLE,
             description='Un lampadaire isolé en panne',
-            latitude=36.8350,
-            longitude=10.1550,
-            quartier='El Manar',
+            latitude=36.8260,
+            longitude=11.0180,
+            quartier='Azmour',
         )
-        res_single = evaluer_anomalie_zone('El Manar', Signalement.Categorie.ECLAIRAGE)
+        res_single = evaluer_anomalie_zone('Azmour', Signalement.Categorie.ECLAIRAGE)
         self.assertIsNone(res_single)
 
-        # 2. Deux signalements faibles dispersés à Le Bardo (~1.5 km)
+        # 2. Deux signalements faibles dispersés à Dar Allouche (~1.5 km)
         Signalement.objects.create(
             categorie=Signalement.Categorie.DECHETS,
             gravite=Signalement.Gravite.FAIBLE,
             description='Bac débordant nord',
-            latitude=36.8090,
-            longitude=10.1300,
-            quartier='Le Bardo',
+            latitude=36.9350,
+            longitude=11.1050,
+            quartier='Dar Allouche',
         )
         Signalement.objects.create(
             categorie=Signalement.Categorie.DECHETS,
             gravite=Signalement.Gravite.FAIBLE,
             description='Bac débordant sud',
-            latitude=36.8225,
-            longitude=10.1300,
-            quartier='Le Bardo',
+            latitude=36.9485,
+            longitude=11.1050,
+            quartier='Dar Allouche',
         )
-        res_sparse = evaluer_anomalie_zone('Le Bardo', Signalement.Categorie.DECHETS)
+        res_sparse = evaluer_anomalie_zone('Dar Allouche', Signalement.Categorie.DECHETS)
         self.assertIsNone(res_sparse)
         self.assertEqual(AlerteAnomalie.objects.count(), 0)
 
     def test_burst_triggers_anomaly_deduplication_and_acknowledgment_api(self):
-        # 5 signalements rapprochés et graves dans Lafayette -> pic anormal
+        # 5 signalements rapprochés et graves à Hammam El Ghezaz -> pic anormal
         for idx in range(5):
             Signalement.objects.create(
                 categorie=Signalement.Categorie.NID_DE_POULE,
                 gravite=Signalement.Gravite.CRITIQUE if idx < 3 else Signalement.Gravite.ELEVEE,
                 description=f'Effondrement chaussée burst #{idx}',
-                latitude=36.8130 + (idx * 0.0002),
-                longitude=10.1780 + (idx * 0.0002),
-                quartier='Lafayette',
+                latitude=36.8906 + (idx * 0.0002),
+                longitude=11.1197 + (idx * 0.0002),
+                quartier='Hammam El Ghezaz',
             )
 
         active_alerts = AlerteAnomalie.objects.filter(
-            quartier='Lafayette',
+            quartier='Hammam El Ghezaz',
             categorie=Signalement.Categorie.NID_DE_POULE,
             statut=AlerteAnomalie.Statut.ACTIVE,
         )
@@ -927,9 +951,9 @@ class IsolationForestAnomalyDetectionTest(TestCase):
             categorie=Signalement.Categorie.NID_DE_POULE,
             gravite=Signalement.Gravite.CRITIQUE,
             description='Effondrement chaussée burst #6',
-            latitude=36.8134,
-            longitude=10.1784,
-            quartier='Lafayette',
+            latitude=36.8910,
+            longitude=11.1201,
+            quartier='Hammam El Ghezaz',
         )
         self.assertEqual(active_alerts.count(), 1)
         alerte.refresh_from_db()
@@ -959,7 +983,7 @@ class IsolationForestAnomalyDetectionTest(TestCase):
         self.assertGreaterEqual(res_list.json()['total_actives'], 1)
 
         detectees = scanner_toutes_anomalies(fenetre_heures=6)
-        self.assertTrue(any(d['quartier'] == 'Lafayette' for d in detectees))
+        self.assertTrue(any(d['quartier'] == 'Hammam El Ghezaz' for d in detectees))
 
         res_ack = self.client.post(
             f'/api/signalements/anomalies/{alerte.id}/acquitter/'

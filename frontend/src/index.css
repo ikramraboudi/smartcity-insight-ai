@@ -132,13 +132,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   background: #0284c7;
   border: 2px solid #38bdf8;
   border-radius: 50%;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
-  font-size: 18px;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  font-size: 14px;
   cursor: pointer;
   transition: transform 0.2s;
 }
@@ -150,11 +150,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 20px;
+  font-size: 15px;
   transition: transform 0.2s;
 }
 
@@ -228,9 +228,35 @@ body {
   background: #0f172a !important;
 }
 
-/* Filtre Sombre Tactique sur les tuiles OpenStreetMap 100% gratuites sans cle */
-.leaflet-tile-pane {
-  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+/* Badges permanents lisibles pour les localités du Nord-Est Cap Bon */
+.capbon-locality-label {
+  background: rgba(15, 23, 42, 0.82) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+  border-radius: 9999px !important;
+  padding: 2px 8px !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45) !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+
+.capbon-locality-label::before {
+  display: none !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(15, 23, 42, 0.8) !important;
+  color: #94a3b8 !important;
+  border-top-left-radius: 6px !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: #38bdf8 !important;
 }
 
 @keyframes spin-linear {

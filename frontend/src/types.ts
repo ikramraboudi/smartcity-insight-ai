@@ -56,9 +56,11 @@ export interface RiskMapResult {
 export interface ZoneRiskMap {
   zone_id: string;
   zone_nom: string;
+  delegation?: string;
   type_troncon?: string;
   latitude: number;
   longitude: number;
+  rayon_zone_m?: number;
   score_risque_pourcentage: number;
   niveau_couleur: 'vert' | 'orange' | 'rouge';
   niveau_risk_map: string;
@@ -273,7 +275,7 @@ export interface AnomalieAnalyseResponse {
 }
 
 // =============================================================================
-// Module Simulateur de Trafic Indépendant (Grand Tunis API)
+// Module Simulateur de Trafic Indépendant (Cap Bon - Port 8001)
 // =============================================================================
 
 export interface TrafficSegment {

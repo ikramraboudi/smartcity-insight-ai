@@ -11,12 +11,12 @@ from django.core.management.base import BaseCommand
 from urgences.simulation import (
     executer_simulation_fausse_alerte,
     executer_simulation_accident_confirme,
-    executer_simulation_risk_map_tunis
+    executer_simulation_risk_map_cap_bon,
 )
 
 
 class Command(BaseCommand):
-    help = "Exécute les simulations de la Protection Civile (Anti-Fausse Alerte, Clustering PostGIS < 5s, Risk Map Tunis)"
+    help = "Exécute les simulations de la Protection Civile (Anti-Fausse Alerte, Clustering < 5s, Risk Map Cap Bon)"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -47,8 +47,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"✔ {res_confirme['message']}"))
 
         if mode in ('risk_map', 'all'):
-            self.stdout.write("\n--- [3] Simulation Risk Map Tunis (Historiques & Prédictions) ---")
-            res_risk = executer_simulation_risk_map_tunis()
+            self.stdout.write("\n--- [3] Simulation Risk Map Cap Bon (Historiques & Prédictions) ---")
+            res_risk = executer_simulation_risk_map_cap_bon()
             self.stdout.write(f"• Secteurs analysés : {res_risk['nb_secteurs_evalues']}")
             self.stdout.write(f"• Répartition : {res_risk['repartition']['rouges']} Rouges, {res_risk['repartition']['oranges']} Oranges, {res_risk['repartition']['vertes']} Vertes")
             self.stdout.write(self.style.SUCCESS(f"✔ {res_risk['message']}"))

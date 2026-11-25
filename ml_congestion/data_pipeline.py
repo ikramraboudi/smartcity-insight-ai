@@ -1,11 +1,7 @@
 """
 Module D — Pipeline de Données & Création de Variables (Sections 8.1, 8.2, 8.4)
-SmartCity Insight AI — Prédiction de Congestion Urbaine (Grand Tunis).
-
-Sources de données :
-- Source A : historique des travaux (chantiers), signalements citoyens, incidents et accidents
-- Source B : géométrie, longueur, typologie et vitesse nominale des 12 artères de Tunis
-- Source C : calendrier (date, heure, jour de la semaine, créneaux) et météo (pluie)
+SmartCity Insight AI — Prédiction de Congestion Routière
+Zone : Nord-Est du Cap Bon (Kélibia, Hammam El Ghezaz, El Haouaria, Dar Allouche, Kerkouane, Azmour, Menzel Horr).
 """
 
 import os
@@ -15,131 +11,92 @@ from typing import Dict, List, Any
 import numpy as np
 import pandas as pd
 
-# Source B : Spécifications des 12 artères métropolitaines du Grand Tunis
-TUNIS_STREETS: List[Dict[str, Any]] = [
+# Source B : Spécifications des 8 corridors routiers du Nord-Est Cap Bon
+CAP_BON_STREETS: List[Dict[str, Any]] = [
     {
-        "street_id": "seg_bourguiba",
-        "street_name": "Avenue Habib Bourguiba & Avenue de France",
-        "zone": "TUNIS_CENTRE",
+        "street_id": "seg_kelibia_centre",
+        "street_name": "Avenue des Martyrs & Place du Marché (Kélibia)",
+        "zone": "KELIBIA",
         "road_type": "VOIE_URBAINE",
-        "base_speed_kmh": 40.0,
-        "length_km": 2.1,
-        "proximity_sensitive": 1,
-        "alternatives": ["seg_liberte_thameur", "seg_mohamed_v"],
-    },
-    {
-        "street_id": "seg_mohamed_v",
-        "street_name": "Avenue Mohamed V",
-        "zone": "TUNIS_CENTRE",
-        "road_type": "ARTERE_PRINCIPALE",
-        "base_speed_kmh": 50.0,
+        "base_speed_kmh": 45.0,
         "length_km": 2.8,
         "proximity_sensitive": 1,
-        "alternatives": ["seg_liberte_thameur", "seg_berges_du_lac"],
+        "alternatives": ["seg_kelibia_port_mansourah", "seg_azmour_carrefour"],
     },
     {
-        "street_id": "seg_route_x_sud",
-        "street_name": "Route X — Tronçon Sud (Bardo / Bab Saadoun)",
-        "zone": "BARDO",
-        "road_type": "VOIE_RAPIDE",
-        "base_speed_kmh": 70.0,
-        "length_km": 4.2,
-        "proximity_sensitive": 0,
-        "alternatives": ["seg_liberte_thameur", "seg_route_x_nord"],
-    },
-    {
-        "street_id": "seg_route_x_nord",
-        "street_name": "Route X — Tronçon Nord (El Manar / Campus)",
-        "zone": "EL_MANAR",
-        "road_type": "VOIE_RAPIDE",
-        "base_speed_kmh": 75.0,
-        "length_km": 4.5,
+        "street_id": "seg_kelibia_port_mansourah",
+        "street_name": "Route du Port & Corniche El Mansourah (Kélibia)",
+        "zone": "KELIBIA",
+        "road_type": "VOIE_URBAINE",
+        "base_speed_kmh": 50.0,
+        "length_km": 3.6,
         "proximity_sensitive": 1,
-        "alternatives": ["seg_gp8_ariana", "seg_ariana_centre"],
+        "alternatives": ["seg_kelibia_centre", "seg_hammam_ghezeze_c27"],
     },
     {
-        "street_id": "seg_rn9_marsa_ouest",
-        "street_name": "RN9 — Route de La Marsa (Tunis Marine ➔ Lac 1)",
-        "zone": "LAC",
-        "road_type": "VOIE_RAPIDE",
-        "base_speed_kmh": 80.0,
-        "length_km": 3.9,
-        "proximity_sensitive": 0,
-        "alternatives": ["seg_berges_du_lac", "seg_mohamed_v"],
+        "street_id": "seg_hammam_ghezeze_c27",
+        "street_name": "Route Côtière C27 — Kélibia / Hammam El Ghezaz",
+        "zone": "HAMMAM_GHEZEZE",
+        "road_type": "ARTERE_PRINCIPALE",
+        "base_speed_kmh": 55.0,
+        "length_km": 5.4,
+        "proximity_sensitive": 1,
+        "alternatives": ["seg_kelibia_port_mansourah", "seg_dar_allouche_c27"],
     },
     {
-        "street_id": "seg_rn9_marsa_est",
-        "street_name": "RN9 — Route de La Marsa (Lac 2 ➔ Ain Zaghouan ➔ Marsa)",
-        "zone": "BANLIEUE_NORD",
-        "road_type": "VOIE_RAPIDE",
-        "base_speed_kmh": 90.0,
-        "length_km": 6.8,
-        "proximity_sensitive": 0,
-        "alternatives": ["seg_goulette_roosevelt", "seg_berges_du_lac"],
-    },
-    {
-        "street_id": "seg_sortie_sud_bab_alioua",
-        "street_name": "Sortie Sud & GP1 — Échangeur Bab Alioua",
-        "zone": "BANLIEUE_SUD",
-        "road_type": "VOIE_RAPIDE",
-        "base_speed_kmh": 65.0,
-        "length_km": 3.5,
-        "proximity_sensitive": 0,
-        "alternatives": ["seg_bourguiba", "seg_mohamed_v"],
-    },
-    {
-        "street_id": "seg_gp8_ariana",
-        "street_name": "GP8 — Route de Bizerte (Ariana Ouest)",
-        "zone": "ARIANA",
+        "street_id": "seg_dar_allouche_c27",
+        "street_name": "C27 Nord — Hammam El Ghezaz / Dar Allouche",
+        "zone": "DAR_ALLOUCHE",
         "road_type": "ARTERE_PRINCIPALE",
         "base_speed_kmh": 60.0,
-        "length_km": 5.1,
+        "length_km": 5.8,
         "proximity_sensitive": 0,
-        "alternatives": ["seg_route_x_nord", "seg_ariana_centre"],
+        "alternatives": ["seg_hammam_ghezeze_c27", "seg_kerkouane_littoral"],
     },
     {
-        "street_id": "seg_berges_du_lac",
-        "street_name": "Boulevard Principal des Berges du Lac 1",
-        "zone": "LAC",
-        "road_type": "VOIE_URBAINE",
-        "base_speed_kmh": 45.0,
-        "length_km": 2.6,
-        "proximity_sensitive": 0,
-        "alternatives": ["seg_rn9_marsa_ouest"],
-    },
-    {
-        "street_id": "seg_ariana_centre",
-        "street_name": "Avenue Taïeb Mhiri (Ariana Centre)",
-        "zone": "ARIANA",
-        "road_type": "VOIE_URBAINE",
-        "base_speed_kmh": 45.0,
-        "length_km": 2.4,
-        "proximity_sensitive": 1,
-        "alternatives": ["seg_gp8_ariana", "seg_route_x_nord"],
-    },
-    {
-        "street_id": "seg_liberte_thameur",
-        "street_name": "Avenue de la Liberté & Bab El Khadra",
-        "zone": "TUNIS_CENTRE",
-        "road_type": "VOIE_URBAINE",
-        "base_speed_kmh": 40.0,
-        "length_km": 2.2,
-        "proximity_sensitive": 1,
-        "alternatives": ["seg_mohamed_v", "seg_bourguiba"],
-    },
-    {
-        "street_id": "seg_goulette_roosevelt",
-        "street_name": "Avenue Franklin Roosevelt (La Goulette / Le Kram)",
-        "zone": "BANLIEUE_NORD",
+        "street_id": "seg_kerkouane_littoral",
+        "street_name": "Route Littorale — Dar Allouche / Kerkouane",
+        "zone": "KERKOUANE",
         "road_type": "ARTERE_PRINCIPALE",
-        "base_speed_kmh": 50.0,
-        "length_km": 3.2,
+        "base_speed_kmh": 60.0,
+        "length_km": 4.9,
         "proximity_sensitive": 0,
-        "alternatives": ["seg_rn9_marsa_est"],
+        "alternatives": ["seg_dar_allouche_c27", "seg_el_haouaria_centre"],
+    },
+    {
+        "street_id": "seg_el_haouaria_centre",
+        "street_name": "Route d'El Haouaria (C27 / Route des Grottes)",
+        "zone": "EL_HAOUARIA",
+        "road_type": "VOIE_URBAINE",
+        "base_speed_kmh": 50.0,
+        "length_km": 6.4,
+        "proximity_sensitive": 1,
+        "alternatives": ["seg_kerkouane_littoral", "seg_azmour_carrefour"],
+    },
+    {
+        "street_id": "seg_azmour_carrefour",
+        "street_name": "Liaison Ouest — Kélibia / Azmour (Route de Takelsa)",
+        "zone": "AZMOUR",
+        "road_type": "ARTERE_PRINCIPALE",
+        "base_speed_kmh": 70.0,
+        "length_km": 7.5,
+        "proximity_sensitive": 0,
+        "alternatives": ["seg_kelibia_centre", "seg_menzel_horr_mc27"],
+    },
+    {
+        "street_id": "seg_menzel_horr_mc27",
+        "street_name": "Corridor MC27 — Kélibia / Menzel Horr",
+        "zone": "MENZEL_HORR",
+        "road_type": "VOIE_RAPIDE",
+        "base_speed_kmh": 75.0,
+        "length_km": 11.2,
+        "proximity_sensitive": 0,
+        "alternatives": ["seg_azmour_carrefour", "seg_kelibia_centre"],
     },
 ]
 
-STREETS_BY_ID = {s["street_id"]: s for s in TUNIS_STREETS}
+TUNIS_STREETS = CAP_BON_STREETS
+STREETS_BY_ID = {s["street_id"]: s for s in CAP_BON_STREETS}
 
 
 def get_creneau_horaire(hour: int) -> str:
@@ -166,8 +123,8 @@ def build_chronological_dataset(
     csv_path: str = "ml_congestion/data/traffic_historical_dataset.csv",
 ) -> pd.DataFrame:
     """
-    Construit le jeu de données chronologique complet (25 920 lignes).
-    Respecte l'ordre temporel pour permettre une séparation apprentissage/test rigoureuse (8.5).
+    Construit le jeu de données chronologique complet (90 * 24 * 8 = 17 280 observations)
+    pour le Nord-Est du Cap Bon.
     """
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     random.seed(42)
@@ -176,16 +133,14 @@ def build_chronological_dataset(
     start_dt = datetime.fromisoformat(start_date)
     records = []
 
-    # Simulation d'épisodes de chantiers réalistes (Source A)
     works_calendar = {
-        "seg_route_x_sud": [(10, 35), (60, 80)],
-        "seg_mohamed_v": [(25, 45)],
-        "seg_bourguiba": [(50, 70)],
-        "seg_rn9_marsa_ouest": [(15, 30)],
-        "seg_gp8_ariana": [(40, 65)],
+        "seg_menzel_horr_mc27": [(10, 35), (60, 80)],
+        "seg_kelibia_centre": [(25, 45)],
+        "seg_hammam_ghezeze_c27": [(50, 70)],
+        "seg_el_haouaria_centre": [(15, 30)],
+        "seg_azmour_carrefour": [(40, 65)],
     }
 
-    # Jours pluvieux (~16% du calendrier - Source C)
     rainy_days = set(random.sample(range(days), k=int(days * 0.16)))
 
     for day_idx in range(days):
@@ -198,10 +153,9 @@ def build_chronological_dataset(
             creneau = get_creneau_horaire(hour)
             is_rush = 1 if (creneau in ["POINTE_MATIN", "POINTE_SOIR"] and not is_weekend) else 0
 
-            for st in TUNIS_STREETS:
+            for st in CAP_BON_STREETS:
                 st_id = st["street_id"]
 
-                # 1. Présence de travaux (Chantier)
                 has_work = 0
                 if st_id in works_calendar:
                     for s_d, e_d in works_calendar[st_id]:
@@ -209,55 +163,45 @@ def build_chronological_dataset(
                             has_work = 1
                             break
 
-                # 2. Incidents récents
                 inc_prob = 0.05 + (0.16 if is_rush else 0) + (0.12 if has_work else 0) + (0.10 if is_rain else 0)
                 incidents_recents = int(min(8, np.random.poisson(lam=max(0.2, inc_prob * 3.5))))
 
-                # 3. Modélisation de l'indicateur de congestion (physique urbaine de Tunis)
-                base_idx = 1.25
+                base_idx = 1.20
 
                 if creneau == "POINTE_MATIN":
-                    if st["zone"] in ["TUNIS_CENTRE", "BARDO", "EL_MANAR"]:
-                        base_idx += 2.25 if not is_weekend else 0.50
+                    if st["zone"] in ["KELIBIA", "MENZEL_HORR"]:
+                        base_idx += 2.20 if not is_weekend else 0.55
                     else:
-                        base_idx += 1.65 if not is_weekend else 0.40
+                        base_idx += 1.45 if not is_weekend else 0.40
                 elif creneau == "POINTE_SOIR":
-                    if st["zone"] in ["BANLIEUE_NORD", "BANLIEUE_SUD", "LAC", "ARIANA"]:
-                        base_idx += 2.35 if not is_weekend else 0.70
+                    if st["zone"] in ["HAMMAM_GHEZEZE", "DAR_ALLOUCHE", "EL_HAOUARIA", "AZMOUR"]:
+                        base_idx += 2.15 if not is_weekend else 0.85
                     else:
-                        base_idx += 1.70 if not is_weekend else 0.45
+                        base_idx += 1.65 if not is_weekend else 0.50
                 elif creneau == "DEJEUNER":
-                    base_idx += 0.85
+                    base_idx += 0.80
                 elif creneau in ["CREUSE_MATIN", "APRES_MIDI"]:
-                    base_idx += 0.50
+                    base_idx += 0.45
                 elif creneau == "SOIREE":
-                    base_idx += 0.40
-                    if is_weekend and st["zone"] in ["LAC", "BANLIEUE_NORD"]:
+                    base_idx += 0.35
+                    if is_weekend and st["zone"] in ["KELIBIA", "HAMMAM_GHEZEZE", "EL_HAOUARIA"]:
                         base_idx += 1.15
 
-                # Type de route & zone sensible
                 if st["road_type"] == "VOIE_URBAINE" and st["proximity_sensitive"]:
                     base_idx += 0.35
 
-                # Impact chantier (+0.95 à +1.45 d'indice)
                 if has_work:
                     base_idx += random.uniform(0.95, 1.45)
 
-                # Impact météo pluie (+0.45 à +0.80)
                 if is_rain:
                     base_idx += random.uniform(0.45, 0.80)
 
-                # Impact incidents récents
                 base_idx += incidents_recents * 0.22
 
-                # Bruit stochastique
                 noise = np.random.normal(loc=0.0, scale=0.18)
                 idx = round(float(np.clip(base_idx + noise, 1.0, 5.0)), 2)
-
-                # Score en pourcentage (0 à 100%)
                 risk_pct = round(float(((idx - 1.0) / 4.0) * 100.0), 2)
 
-                # Classification en 4 classes
                 if idx < 2.0:
                     cls = "FLUIDE"
                 elif idx < 3.2:
@@ -267,7 +211,6 @@ def build_chronological_dataset(
                 else:
                     cls = "CRITIQUE"
 
-                # Durée et retard
                 speed_ratio = max(0.12, 1.0 - ((idx - 1.0) / 4.0) * 0.85)
                 vitesse = round(st["base_speed_kmh"] * speed_ratio, 1)
                 duree = round((st["length_km"] / max(5.0, vitesse)) * 60.0, 2)
@@ -298,7 +241,6 @@ def build_chronological_dataset(
                     "vitesse_relevee_kmh": vitesse,
                     "duree_trajet_min": duree,
                     "delay_minutes": retard,
-                    # Targets
                     "congestion_index": idx,
                     "congestion_risk_pct": risk_pct,
                     "congestion_class": cls,
@@ -306,7 +248,7 @@ def build_chronological_dataset(
 
     df = pd.DataFrame(records)
     df.to_csv(csv_path, index=False)
-    print(f"✅ Pipeline données prêt : {len(df)} observations créées ({csv_path})")
+    print(f"✅ Pipeline données Nord-Est Cap Bon prêt : {len(df)} observations créées ({csv_path})")
     return df
 
 

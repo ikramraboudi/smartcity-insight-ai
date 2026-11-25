@@ -15,7 +15,7 @@ import joblib
 import pandas as pd
 import numpy as np
 
-from .data_pipeline import TUNIS_STREETS, STREETS_BY_ID, get_creneau_horaire
+from .data_pipeline import CAP_BON_STREETS, STREETS_BY_ID, get_creneau_horaire
 from .train import train_and_evaluate_models, ALL_FEATURES
 
 MODELS_DIR = "ml_congestion/models"
@@ -101,7 +101,7 @@ def predict_congestion_by_street(
 
     dt = datetime.fromisoformat(simulation_datetime)
     rows = []
-    for st in TUNIS_STREETS:
+    for st in CAP_BON_STREETS:
         has_work = 1 if st["street_id"] in chantiers else 0
         incidents = incidents_by_street.get(st["street_id"], 1 if has_work else 0)
         rows.append(_build_features_row(st, dt, has_work, meteo_pluie, incidents))
@@ -113,7 +113,7 @@ def predict_congestion_by_street(
     pred_classes = classifier.predict(df_features)
 
     results = []
-    for i, st in enumerate(TUNIS_STREETS):
+    for i, st in enumerate(CAP_BON_STREETS):
         idx = round(float(np.clip(pred_indices[i], 1.0, 5.0)), 2)
         score_pct = round(float(((idx - 1.0) / 4.0) * 100.0), 1)
         cls = str(pred_classes[i])

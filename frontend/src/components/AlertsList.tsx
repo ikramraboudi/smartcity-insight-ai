@@ -10,6 +10,7 @@ import {
   Ambulance,
   Search,
 } from 'lucide-react';
+import { getGeoConfig } from '../config/geoConfig';
 import { Alerte, StatutAlerte } from '../types';
 
 interface AlertsListProps {
@@ -292,7 +293,7 @@ export const AlertsList: React.FC<AlertsListProps> = ({
                   <MapPin size={14} color="#38bdf8" style={{ marginTop: '2px', flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>
-                      {alerte.adresse || 'Tunis Centre'}
+                      {alerte.adresse || getGeoConfig().default_city}
                     </div>
                     <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>
                       {alerte.latitude.toFixed(4)}, {alerte.longitude.toFixed(4)}

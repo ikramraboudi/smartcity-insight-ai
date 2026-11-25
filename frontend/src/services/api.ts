@@ -1,5 +1,11 @@
 import axios from 'axios';
 import {
+  FALLBACK_CASERNES_CAP_BON,
+  GeoConfig,
+  getGeoConfig,
+  setGeoConfig,
+} from '../config/geoConfig';
+import {
   Alerte,
   AuthUser,
   Caserne,
@@ -341,6 +347,13 @@ export async function updateSignalementStatut(
 }
 
 /**
+ * Supprime définitivement un signalement (réservé au Responsable Municipal)
+ */
+export async function deleteSignalement(id: string): Promise<void> {
+  await apiClient.delete(`signalements/${id}/`);
+}
+
+/**
  * Récupère les statistiques globales, analytiques filtrables et de conformité INPDP
  * (endpoint sécurisé réservé au Responsable Municipal)
  */
@@ -434,69 +447,22 @@ export async function fetchAlertes(): Promise<Alerte[]> {
   }
 }
 
+export async function fetchGeoConfig(): Promise<GeoConfig> {
+  try {
+    const res = await apiClient.get<GeoConfig>('urgences/geo-config/');
+    return setGeoConfig(res.data);
+  } catch {
+    return getGeoConfig();
+  }
+}
+
 export async function fetchCasernes(): Promise<Caserne[]> {
   try {
     const res = await apiClient.get<Caserne[]>('urgences/casernes/');
     return res.data;
   } catch (err) {
-    console.warn('Backend casernes API non joignable, fallback statique', err);
-    return [
-      {
-        id: 'caserne-bab-el-khadra',
-        nom: 'Caserne Centrale - Bab El Khadra',
-        adresse: 'Avenue Habib Thameur / Bab El Khadra, Tunis',
-        latitude: 36.8123,
-        longitude: 10.1784,
-        telephone: '198 / +216 71 345 678',
-        ambulances_disponibles: 3,
-        camions_disponibles: 2,
-        statut: 'OPERATIONNELLE',
-      },
-      {
-        id: 'caserne-bab-saadoun',
-        nom: 'Caserne Médina Ouest - Bab Saadoun',
-        adresse: 'Place Bab Saadoun, Tunis',
-        latitude: 36.8095,
-        longitude: 10.1582,
-        telephone: '198 / +216 71 560 123',
-        ambulances_disponibles: 2,
-        camions_disponibles: 1,
-        statut: 'OPERATIONNELLE',
-      },
-      {
-        id: 'caserne-montplaisir',
-        nom: 'Caserne Lac & Montplaisir',
-        adresse: 'Avenue du Japon, Montplaisir, Tunis',
-        latitude: 36.8248,
-        longitude: 10.1906,
-        telephone: '198 / +216 71 840 990',
-        ambulances_disponibles: 4,
-        camions_disponibles: 2,
-        statut: 'OPERATIONNELLE',
-      },
-      {
-        id: 'caserne-goulette',
-        nom: 'Caserne Port & Banlieue Nord - La Goulette',
-        adresse: 'Avenue Franklin Roosevelt, La Goulette',
-        latitude: 36.8182,
-        longitude: 10.3045,
-        telephone: '198 / +216 71 735 000',
-        ambulances_disponibles: 2,
-        camions_disponibles: 2,
-        statut: 'OPERATIONNELLE',
-      },
-      {
-        id: 'caserne-ariana',
-        nom: 'Caserne Ariana Centre',
-        adresse: 'Avenue Taïeb Mhiri, Ariana',
-        latitude: 36.8625,
-        longitude: 10.1956,
-        telephone: '198 / +216 71 710 400',
-        ambulances_disponibles: 3,
-        camions_disponibles: 2,
-        statut: 'OPERATIONNELLE',
-      },
-    ];
+    console.warn('Backend casernes API non joignable, fallback statique Cap Bon', err);
+    return FALLBACK_CASERNES_CAP_BON;
   }
 }
 
@@ -571,7 +537,7 @@ export async function predictRiskMap(params: {
 
 
 // =============================================================================
-// Client API pour le Simulateur de Trafic Autonome (Grand Tunis - Port 8001)
+// Client API pour le Simulateur de Trafic Autonome (Cap Bon - Port 8001)
 // =============================================================================
 
 export const TRAFFIC_SIMULATOR_URL =

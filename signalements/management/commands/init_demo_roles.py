@@ -13,7 +13,7 @@ class Command(BaseCommand):
         resp_user, created_resp = User.objects.get_or_create(
             username='responsable_mairie',
             defaults={
-                'email': 'responsable@tunis.gov.tn',
+                'email': 'responsable@capbon.gov.tn',
                 'is_staff': True,
             },
         )
@@ -28,7 +28,7 @@ class Command(BaseCommand):
         cit_user, created_cit = User.objects.get_or_create(
             username='citoyen_demo',
             defaults={
-                'email': 'citoyen@tunis.tn',
+                'email': 'citoyen@capbon.tn',
             },
         )
         cit_user.set_password('Citoyen2026!')

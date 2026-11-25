@@ -15,6 +15,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { getGeoConfig } from '../config/geoConfig';
 import { createSignalement, saveCitizenReportId } from '../services/api';
 import {
   CategorieSignalement,
@@ -100,20 +101,8 @@ const GRAVITES: {
   },
 ];
 
-const QUARTIERS_TUNIS = [
-  'Centre-Ville Tunis',
-  'Bab El Khadra',
-  'Bab Saadoun',
-  'Montplaisir',
-  'La Goulette',
-  'Lafayette',
-  'Ariana Centre',
-  'Le Bardo',
-  'El Menzah',
-  'El Manar',
-];
-
 export const CitizenReportForm: React.FC = () => {
+  const geoCfg = getGeoConfig();
   const [activeTab, setActiveTab] = useState<'report' | 'tracking'>('report');
   const [highlightReportId, setHighlightReportId] = useState<string | null>(null);
 
@@ -121,9 +110,9 @@ export const CitizenReportForm: React.FC = () => {
   const [gravite, setGravite] = useState<GraviteSignalement>('MOYENNE');
   const [description, setDescription] = useState('');
   const [adresseTexte, setAdresseTexte] = useState('');
-  const [quartier, setQuartier] = useState('Centre-Ville Tunis');
-  const [latitude, setLatitude] = useState<number>(36.8005);
-  const [longitude, setLongitude] = useState<number>(10.18);
+  const [quartier, setQuartier] = useState(geoCfg.default_city);
+  const [latitude, setLatitude] = useState<number>(geoCfg.default_coords.latitude);
+  const [longitude, setLongitude] = useState<number>(geoCfg.default_coords.longitude);
   const [isGeolocating, setIsGeolocating] = useState(false);
   const [gpsStatusText, setGpsStatusText] = useState<string>('Détection GPS...');
 
@@ -140,11 +129,12 @@ export const CitizenReportForm: React.FC = () => {
 
   // Géolocalisation via l'API navigateur
   const handleGeolocate = useCallback((silentFallback = false) => {
+    const fallbackCfg = getGeoConfig();
     if (!navigator.geolocation) {
       if (!silentFallback) {
         alert("La géolocalisation n'est pas supportée par votre navigateur.");
       }
-      setGpsStatusText('Position par défaut (Tunis) — ajustez sur la carte');
+      setGpsStatusText(`Position par défaut (${fallbackCfg.default_city}) — ajustez sur la carte`);
       return;
     }
     setIsGeolocating(true);
@@ -157,9 +147,9 @@ export const CitizenReportForm: React.FC = () => {
       },
       (err) => {
         console.warn('Erreur géolocalisation:', err);
-        setLatitude(36.8005);
-        setLongitude(10.18);
-        setGpsStatusText('Position par défaut (Tunis) — cliquez sur la carte pour préciser');
+        setLatitude(fallbackCfg.default_coords.latitude);
+        setLongitude(fallbackCfg.default_coords.longitude);
+        setGpsStatusText(`Position par défaut (${fallbackCfg.default_city}) — cliquez sur la carte pour préciser`);
         setIsGeolocating(false);
       },
       { timeout: 8000, enableHighAccuracy: true }
@@ -278,14 +268,14 @@ export const CitizenReportForm: React.FC = () => {
             marginBottom: 10,
           }}
         >
-          <Zap size={15} /> Portail Citoyen SmartCity Tunis
+          <Zap size={15} /> Portail Citoyen SmartCity {geoCfg.region_short_name}
         </div>
         <h1 style={{ fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: 700, color: 'var(--text-main)', marginBottom: 8 }}>
           Espace Participatif Citoyen
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 13.5, maxWidth: 640, margin: '0 auto 18px' }}>
           Signalez une anomalie urbaine avec anonymisation INPDP automatique, ou suivez en direct
-          l'intervention des services municipaux sur la carte du Grand Tunis.
+          l'intervention des services municipaux sur la carte du {geoCfg.region_name}.
         </p>
 
         {/* Barre d'onglets harmonisée */}
@@ -660,7 +650,7 @@ export const CitizenReportForm: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 12 }}>
             <div>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                Quartier
+                Délégation / Commune
               </span>
               <select
                 value={quartier}
@@ -676,7 +666,7 @@ export const CitizenReportForm: React.FC = () => {
                   outline: 'none',
                 }}
               >
-                {QUARTIERS_TUNIS.map((q) => (
+                {geoCfg.delegation_names.map((q) => (
                   <option key={q} value={q}>
                     {q}
                   </option>
@@ -692,7 +682,7 @@ export const CitizenReportForm: React.FC = () => {
                 type="text"
                 value={adresseTexte}
                 onChange={(e) => setAdresseTexte(e.target.value)}
-                placeholder="Ex: Avenue Habib Bourguiba"
+                placeholder={`Ex: ${geoCfg.default_address}`}
                 style={{
                   width: '100%',
                   background: 'var(--bg-dark)',

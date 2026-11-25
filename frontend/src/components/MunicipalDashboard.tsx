@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Trash2,
   TrendingUp,
   UserCheck,
   X,
@@ -29,6 +30,7 @@ import {
   acquitterAnomalie,
   analyserAnomalies,
   changerStatutSignalement,
+  deleteSignalement,
   fetchCurrentUser,
   fetchTrafficSegments,
   fetchZonesRiskMap,
@@ -50,23 +52,12 @@ import {
   TrafficSegment,
   ZoneRiskMap,
 } from '../types';
+import { getGeoConfig } from '../config/geoConfig';
 import { MunicipalLogin } from './MunicipalLogin';
 import { MunicipalCharts } from './MunicipalCharts';
 import { MunicipalHeatmap } from './MunicipalHeatmap';
 
-const QUARTIERS_LIST = [
-  'TOUS',
-  'Centre-Ville Tunis',
-  'Bab El Khadra',
-  'Bab Saadoun',
-  'Montplaisir',
-  'La Goulette',
-  'Lafayette',
-  'Ariana Centre',
-  'Le Bardo',
-  'El Menzah',
-  'El Manar',
-];
+const QUARTIERS_LIST = ['TOUS', ...getGeoConfig().delegation_names];
 
 const STATUTS_CONFIG: Record<
   StatutSignalement,
@@ -254,6 +245,11 @@ export const MunicipalDashboard: React.FC = () => {
     url: string;
     zones: number;
     title: string;
+  } | null>(null);
+  const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<{
+    id: string;
+    title: string;
+    quartier: string;
   } | null>(null);
 
   const handleLogout = useCallback(() => {
@@ -461,6 +457,36 @@ export const MunicipalDashboard: React.FC = () => {
       );
     } finally {
       setAcknowledgingId(null);
+    }
+  };
+
+  // Suppression définitive d'un signalement via DELETE /api/signalements/{id}/
+  const handleDeleteSignalement = async (id: string) => {
+    setUpdatingId(id);
+    setActionError(null);
+    try {
+      await deleteSignalement(id);
+      setSignalements((prev) => prev.filter((s) => s.id !== id));
+      setConfirmDeleteTarget(null);
+      const refreshedStats = await getSignalementStatistiques(activeFilters);
+      setGlobalStats(refreshedStats);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 403) {
+        setAccessDeniedError(
+          err?.response?.data?.detail ||
+            'Action bloquée (HTTP 403) : droits Responsable Municipal requis.'
+        );
+      } else if (status === 401) {
+        handleLogout();
+      } else {
+        setActionError(
+          err?.response?.data?.detail ||
+            'Impossible de supprimer ce signalement.'
+        );
+      }
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -1917,6 +1943,35 @@ export const MunicipalDashboard: React.FC = () => {
                     <option value="RESOLU">Résolu</option>
                     <option value="REJETE_SPAM">Rejeté / Spam</option>
                   </select>
+
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() =>
+                      setConfirmDeleteTarget({
+                        id: s.id,
+                        title: catInfo.label,
+                        quartier: s.quartier,
+                      })
+                    }
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      color: '#fca5a5',
+                      borderRadius: 8,
+                      padding: '7px 10px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: isUpdating ? 'not-allowed' : 'pointer',
+                      opacity: isUpdating ? 0.6 : 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Trash2 size={13} /> Supprimer
+                  </button>
                 </div>
               </div>
             );
@@ -1996,6 +2051,110 @@ export const MunicipalDashboard: React.FC = () => {
               <span style={{ color: '#10b981', fontWeight: 600 }}>
                 ✓ {modalImage.zones} zone(s) de visage/plaque floutée(s)
               </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmation de suppression d'un signalement */}
+      {confirmDeleteTarget && (
+        <div
+          onClick={() => updatingId !== confirmDeleteTarget.id && setConfirmDeleteTarget(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: 14,
+              maxWidth: 440,
+              width: '100%',
+              padding: 24,
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.55)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#f87171',
+                  flexShrink: 0,
+                }}
+              >
+                <Trash2 size={18} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-main)' }}>
+                Supprimer ce signalement ?
+              </h3>
+            </div>
+
+            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 20 }}>
+              Vous êtes sur le point de supprimer définitivement le signalement{' '}
+              <strong style={{ color: 'var(--text-main)' }}>
+                {confirmDeleteTarget.title} ({confirmDeleteTarget.quartier})
+              </strong>
+              . Cette action est irréversible.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                disabled={updatingId === confirmDeleteTarget.id}
+                onClick={() => setConfirmDeleteTarget(null)}
+                style={{
+                  background: 'var(--bg-dark)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-main)',
+                  borderRadius: 8,
+                  padding: '8px 14px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: updatingId === confirmDeleteTarget.id ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={updatingId === confirmDeleteTarget.id}
+                onClick={() => void handleDeleteSignalement(confirmDeleteTarget.id)}
+                style={{
+                  background: '#ef4444',
+                  border: 'none',
+                  color: '#fff',
+                  borderRadius: 8,
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: updatingId === confirmDeleteTarget.id ? 'not-allowed' : 'pointer',
+                  opacity: updatingId === confirmDeleteTarget.id ? 0.7 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Trash2 size={14} />
+                <span>
+                  {updatingId === confirmDeleteTarget.id ? 'Suppression...' : 'Supprimer'}
+                </span>
+              </button>
             </div>
           </div>
         </div>

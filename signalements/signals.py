@@ -4,6 +4,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
+from config.geo_config import DEFAULT_CITY, REGION_SHORT_NAME
 from .models import Signalement
 from urgences.models import SignalementAccident, AlerteAccident, JournalAudit
 from urgences.services import traiter_signalement, diffuser_alerte_temps_reel
@@ -64,7 +65,7 @@ def synchroniser_signalement_vers_protection_civile(sender, instance: Signalemen
 
                 adresse_clean = (
                     instance.adresse_texte
-                    or (f"{instance.quartier}, Tunis" if instance.quartier else "Tunis")
+                    or (f"{instance.quartier}, {REGION_SHORT_NAME}" if instance.quartier else f"{DEFAULT_CITY}, {REGION_SHORT_NAME}")
                 )
                 desc_clean = instance.description or f"Signalement {instance.get_categorie_display()} ({instance.get_gravite_display()})"
 

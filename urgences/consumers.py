@@ -1,9 +1,11 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+from config.geo_config import REGION_NAME, WS_GROUP_NAME
+
 
 class ProtectionCivileConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.group_name = "protection_civile_tunis"
+        self.group_name = WS_GROUP_NAME
         # Connecter l'écran de la Protection Civile au canal temps réel
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
@@ -11,7 +13,7 @@ class ProtectionCivileConsumer(AsyncWebsocketConsumer):
         # Message de confirmation de connexion établie (< 5s)
         await self.send(text_data=json.dumps({
             "event": "CONNEXION_ETABLIE",
-            "message": "Connecté au canal d'urgence de la Protection Civile de Tunis (< 5s)",
+            "message": f"Connecté au canal d'urgence Protection Civile — {REGION_NAME} (< 5s)",
             "canal": self.group_name
         }))
 

@@ -3,6 +3,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from config.geo_config import DEFAULT_CITY
 
 
 class UserRole(models.TextChoices):
@@ -119,7 +120,7 @@ class Signalement(models.Model):
     latitude = models.FloatField(db_index=True)
     longitude = models.FloatField(db_index=True)
     adresse_texte = models.CharField(max_length=255, blank=True)
-    quartier = models.CharField(max_length=120, default='Centre-Ville Tunis', db_index=True)
+    quartier = models.CharField(max_length=120, default=DEFAULT_CITY, db_index=True)
     photo_floutee = models.ImageField(upload_to='signalements/anonymized/', null=True, blank=True)
     visages_plaques_floutes = models.BooleanField(default=False)
     nb_zones_floutees = models.IntegerField(default=0)

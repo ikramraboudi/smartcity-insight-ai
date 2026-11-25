@@ -1,5 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
+import {
+  addStandardBasemapLayer,
+  getGeoConfig,
+  getRegionLeafletBounds,
+} from '../config/geoConfig';
 
 interface CitizenLocationPickerMapProps {
   latitude: number;
@@ -26,25 +31,19 @@ export const CitizenLocationPickerMap: React.FC<CitizenLocationPickerMapProps> =
     if (!containerRef.current || mapRef.current) return;
 
     const { latitude: initLat, longitude: initLng } = initialCoordsRef.current;
-
-    const tunisBounds = L.latLngBounds(
-      L.latLng(36.4, 9.8),
-      L.latLng(37.2, 10.6)
-    );
+    const geoCfg = getGeoConfig();
+    const regionBounds = getRegionLeafletBounds(geoCfg);
 
     const map = L.map(containerRef.current, {
       center: [initLat, initLng],
-      zoom: 14,
-      minZoom: 11,
-      maxZoom: 18,
-      maxBounds: tunisBounds,
-      maxBoundsViscosity: 0.8,
+      zoom: geoCfg.map.picker_zoom,
+      minZoom: geoCfg.map.min_zoom,
+      maxZoom: geoCfg.map.max_zoom,
+      maxBounds: regionBounds,
+      maxBoundsViscosity: 1.0,
     });
 
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(map);
+    addStandardBasemapLayer(map);
 
     const pinIcon = L.divIcon({
       className: 'citizen-picker-pin',

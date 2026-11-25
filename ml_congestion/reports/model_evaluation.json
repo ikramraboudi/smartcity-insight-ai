@@ -1,91 +1,91 @@
 {
-  "evaluation_timestamp": "2026-11-22T20:58:15.075810",
-  "train_samples": 20736,
-  "test_samples": 5184,
+  "evaluation_timestamp": "2026-11-25T22:03:17.675649",
+  "train_samples": 13824,
+  "test_samples": 3456,
   "chronological_split": {
     "train_period": "2026-08-01 -> 2026-10-11",
     "test_period": "2026-10-12 -> 2026-10-29"
   },
   "regression_comparison": {
     "Random Forest Regressor": {
-      "MAE": 0.1588,
-      "RMSE": 0.2009,
-      "R2": 0.9528,
-      "train_time_sec": 0.5
+      "MAE": 0.1643,
+      "RMSE": 0.2078,
+      "R2": 0.9458,
+      "train_time_sec": 0.33
     },
     "Gradient Boosting Regressor": {
-      "MAE": 0.153,
-      "RMSE": 0.1923,
-      "R2": 0.9568,
-      "train_time_sec": 2.33
+      "MAE": 0.1547,
+      "RMSE": 0.1941,
+      "R2": 0.9527,
+      "train_time_sec": 1.38
     }
   },
   "best_regression_model": "Gradient Boosting Regressor",
   "classification_comparison": {
     "Random Forest Classifier": {
-      "Accuracy": 0.8677,
-      "Precision": 0.867,
-      "Recall": 0.8677,
-      "F1_Score": 0.8672,
-      "train_time_sec": 0.31
+      "Accuracy": 0.855,
+      "Precision": 0.8545,
+      "Recall": 0.855,
+      "F1_Score": 0.8547,
+      "train_time_sec": 0.2
     },
     "Gradient Boosting Classifier": {
-      "Accuracy": 0.8764,
-      "Precision": 0.8757,
-      "Recall": 0.8764,
-      "F1_Score": 0.8759,
-      "train_time_sec": 7.27
+      "Accuracy": 0.8643,
+      "Precision": 0.864,
+      "Recall": 0.8643,
+      "F1_Score": 0.8633,
+      "train_time_sec": 4.12
     }
   },
   "best_classification_model": "Gradient Boosting Classifier",
   "feature_importances": [
     {
       "feature": "is_rush_hour",
-      "importance": 0.5653
+      "importance": 0.4552
     },
     {
       "feature": "presence_travaux",
-      "importance": 0.1997
+      "importance": 0.2795
     },
     {
       "feature": "meteo_pluie",
-      "importance": 0.0688
+      "importance": 0.0646
     },
     {
       "feature": "hour",
-      "importance": 0.0372
-    },
-    {
-      "feature": "creneau_horaire_NUIT",
-      "importance": 0.0368
+      "importance": 0.0556
     },
     {
       "feature": "incidents_recents",
-      "importance": 0.0269
+      "importance": 0.0316
     },
     {
-      "feature": "length_km",
-      "importance": 0.0191
+      "feature": "base_speed_kmh",
+      "importance": 0.0212
+    },
+    {
+      "feature": "road_type_VOIE_URBAINE",
+      "importance": 0.0209
+    },
+    {
+      "feature": "creneau_horaire_NUIT",
+      "importance": 0.0156
     },
     {
       "feature": "creneau_horaire_DEJEUNER",
-      "importance": 0.0105
-    },
-    {
-      "feature": "proximity_sensitive",
-      "importance": 0.0061
+      "importance": 0.0087
     },
     {
       "feature": "is_weekend",
-      "importance": 0.0046
+      "importance": 0.0083
     },
     {
-      "feature": "creneau_horaire_POINTE_MATIN",
-      "importance": 0.0038
+      "feature": "creneau_horaire_SOIREE",
+      "importance": 0.0064
     },
     {
       "feature": "day_of_week",
-      "importance": 0.0031
+      "importance": 0.0063
     }
   ]
 }

@@ -6,6 +6,13 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from config.geo_config import (
+    CASERNES_CAP_BON,
+    DEFAULT_ADDRESS,
+    DEFAULT_COORDS,
+    POINTS_SIMULATION_CAP_BON,
+    get_public_geo_config,
+)
 from .models import SignalementAccident, AlerteAccident, JournalAudit, JournalAuditIntervention
 from .services import (
     traiter_signalement,
@@ -15,13 +22,13 @@ from .services import (
 from .ml_models import (
     prediger_risque_zone,
     get_toutes_les_zones_risk_map,
-    SECTEURS_TUNIS,
+    SECTEURS_CAP_BON,
 )
 from .llm_assistant import interroger_assistant_llm
 from .simulation import (
     executer_simulation_fausse_alerte,
     executer_simulation_accident_confirme,
-    executer_simulation_risk_map_tunis,
+    executer_simulation_risk_map_cap_bon,
 )
 
 def notifier_simulateur_accident(alerte):
@@ -59,74 +66,14 @@ def notifier_simulateur_cloture(alerte_id):
             pass
     threading.Thread(target=_worker, daemon=True).start()
 
-CASERNES_TUNIS = [
-    {
-        "id": "caserne-bab-el-khadra",
-        "nom": "Caserne Centrale - Bab El Khadra",
-        "adresse": "Avenue Habib Thameur / Bab El Khadra, Tunis",
-        "latitude": 36.8123,
-        "longitude": 10.1784,
-        "telephone": "198 / +216 71 345 678",
-        "ambulances_disponibles": 3,
-        "camions_disponibles": 2,
-        "statut": "OPERATIONNELLE"
-    },
-    {
-        "id": "caserne-bab-saadoun",
-        "nom": "Caserne Médina Ouest - Bab Saadoun",
-        "adresse": "Place Bab Saadoun, Tunis",
-        "latitude": 36.8095,
-        "longitude": 10.1582,
-        "telephone": "198 / +216 71 560 123",
-        "ambulances_disponibles": 2,
-        "camions_disponibles": 1,
-        "statut": "OPERATIONNELLE"
-    },
-    {
-        "id": "caserne-montplaisir",
-        "nom": "Caserne Lac & Montplaisir",
-        "adresse": "Avenue du Japon, Montplaisir, Tunis",
-        "latitude": 36.8248,
-        "longitude": 10.1906,
-        "telephone": "198 / +216 71 840 990",
-        "ambulances_disponibles": 4,
-        "camions_disponibles": 2,
-        "statut": "OPERATIONNELLE"
-    },
-    {
-        "id": "caserne-goulette",
-        "nom": "Caserne Port & Banlieue Nord - La Goulette",
-        "adresse": "Avenue Franklin Roosevelt, La Goulette",
-        "latitude": 36.8182,
-        "longitude": 10.3045,
-        "telephone": "198 / +216 71 735 000",
-        "ambulances_disponibles": 2,
-        "camions_disponibles": 2,
-        "statut": "OPERATIONNELLE"
-    },
-    {
-        "id": "caserne-ariana",
-        "nom": "Caserne Ariana Centre",
-        "adresse": "Avenue Taïeb Mhiri, Ariana",
-        "latitude": 36.8625,
-        "longitude": 10.1956,
-        "telephone": "198 / +216 71 710 400",
-        "ambulances_disponibles": 3,
-        "camions_disponibles": 2,
-        "statut": "OPERATIONNELLE"
-    }
-]
+CASERNES_CAP_BON_LIST = CASERNES_CAP_BON
+POINTS_SIMULATION = POINTS_SIMULATION_CAP_BON
 
-POINTS_SIMULATION = [
-    {"adresse": "Avenue Habib Bourguiba, Tunis Centre", "lat": 36.8002, "lng": 10.1865, "gravite": "GRAVE"},
-    {"adresse": "Échangeur Bab Alioua, Sortie Sud", "lat": 36.7865, "lng": 10.1832, "gravite": "GRAVE"},
-    {"adresse": "Avenue Mohamed V, devant Cité de la Culture", "lat": 36.8142, "lng": 10.1824, "gravite": "MOYENNE"},
-    {"adresse": "Route X / Bardo - Rond-Point", "lat": 36.8115, "lng": 10.1384, "gravite": "GRAVE"},
-    {"adresse": "Les Berges du Lac 1 - Rue du Lac Windermere", "lat": 36.8340, "lng": 10.2330, "gravite": "MOYENNE"},
-    {"adresse": "Route de la Marsa (RN9) - Échangeur Ain Zaghouan", "lat": 36.8524, "lng": 10.2785, "gravite": "GRAVE"},
-    {"adresse": "Avenue de Carthage, Tunis", "lat": 36.7954, "lng": 10.1820, "gravite": "FAIBLE"},
-    {"adresse": "Route de Bizerte (GP8), Ariana Ouest", "lat": 36.8600, "lng": 10.1650, "gravite": "GRAVE"},
-]
+
+@api_view(['GET'])
+def obtenir_geo_config(request):
+    """Retourne la configuration géographique centralisée (Cap Bon / Gouvernorat de Nabeul)."""
+    return Response(get_public_geo_config())
 
 @api_view(['GET'])
 def lister_alertes(request):
@@ -153,12 +100,12 @@ def lister_alertes(request):
 
 @api_view(['GET'])
 def lister_casernes(request):
-    """Retourne les coordonnées et capacités des casernes de Protection Civile de Tunis"""
-    return Response(CASERNES_TUNIS)
+    """Retourne les coordonnées et capacités des casernes de Protection Civile du Cap Bon"""
+    return Response(CASERNES_CAP_BON_LIST)
 
 @api_view(['POST'])
 def simuler_accident(request):
-    """Génère instantanément un accident réaliste sur Tunis pour tester le WebSocket & Routes API"""
+    """Génère instantanément un accident réaliste sur le Cap Bon pour tester le WebSocket & Routes API"""
     point = random.choice(POINTS_SIMULATION)
     lat = float(request.data.get('latitude', point["lat"]))
     lng = float(request.data.get('longitude', point["lng"]))
@@ -181,6 +128,7 @@ def simuler_accident(request):
         "statut": alerte.statut,
         "gravite": alerte.gravite,
         "adresse": alerte.adresse,
+        "zone_nom": alerte.zone_nom,
         "latitude": alerte.latitude,
         "longitude": alerte.longitude,
         "date_confirmation": alerte.date_confirmation.isoformat() if alerte.date_confirmation else None
@@ -191,12 +139,12 @@ def creer_signalement(request):
     """
     Passerelle d'intégration avec le module Signalements (Étudiant 2) :
     Reçoit les signalements de catégorie ACCIDENT validés ou transmis par l'Espace Citoyen
-    pour déclencher le regroupement spatial PostGIS et la diffusion temps réel (< 5s) aux pompiers.
+    pour déclencher le regroupement spatial et la diffusion temps réel (< 5s) aux pompiers.
     """
     sig = SignalementAccident.objects.create(
-        latitude=float(request.data.get('latitude', 36.8065)),
-        longitude=float(request.data.get('longitude', 10.1815)),
-        adresse=request.data.get('adresse', 'Avenue Habib Bourguiba, Tunis'),
+        latitude=float(request.data.get('latitude', DEFAULT_COORDS['latitude'])),
+        longitude=float(request.data.get('longitude', DEFAULT_COORDS['longitude'])),
+        adresse=request.data.get('adresse', DEFAULT_ADDRESS),
         description=request.data.get('description', ''),
         gravite_estimee=request.data.get('gravite', 'GRAVE')
     )
@@ -297,7 +245,7 @@ def calculer_risk_map_zone(request):
 
 @api_view(['GET'])
 def lister_zones_risk_map(request):
-    """Retourne la cartographie complète des secteurs du Grand Tunis avec scores et facteurs explicatifs."""
+    """Retourne la cartographie complète des secteurs du Cap Bon avec scores et facteurs explicatifs."""
     pluie = int(request.GET.get('meteo_pluie', 0))
     travaux = int(request.GET.get('presence_travaux', 0))
     zones = get_toutes_les_zones_risk_map(meteo_pluie=pluie, presence_travaux=travaux)
@@ -321,8 +269,8 @@ def endpoint_simulation_urgences(request):
     """
     Endpoint de pilotage pour la soutenance (Mode Démo Jury) :
     - mode 'fausse_alerte' : test neutralisation fausse alerte isolée
-    - mode 'accident_confirme' : test clustering PostGIS 3 signalements < 5s
-    - mode 'risk_map' : génération cartographie Tunis (vert, orange, rouge)
+    - mode 'accident_confirme' : test clustering spatial 3 signalements < 5s
+    - mode 'risk_map' : génération cartographie Cap Bon (vert, orange, rouge)
     """
     mode = str(request.data.get('mode', 'accident_confirme')).lower().strip()
 
@@ -331,7 +279,7 @@ def endpoint_simulation_urgences(request):
     elif mode == 'accident_confirme':
         res = executer_simulation_accident_confirme()
     elif mode == 'risk_map':
-        res = executer_simulation_risk_map_tunis()
+        res = executer_simulation_risk_map_cap_bon()
     else:
         return Response({"error": f"Mode inconnu '{mode}'. Choix: fausse_alerte, accident_confirme, risk_map"}, status=400)
 

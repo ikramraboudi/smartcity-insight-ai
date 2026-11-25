@@ -9,114 +9,127 @@ from .services import (
 )
 from .ml_models import (
     prediger_risque_zone,
-    evaluer_secteur_tunis,
     get_toutes_les_zones_risk_map,
-    SECTEURS_TUNIS,
+    SECTEURS_CAP_BON,
 )
 from .llm_assistant import extraire_contexte_terrain_reel, interroger_assistant_llm
-from .simulation import (
-    executer_simulation_fausse_alerte,
-    executer_simulation_accident_confirme,
-    executer_simulation_risk_map_tunis,
-)
 
 User = get_user_model()
 
 
 class UrgencesClusteringTestCase(TestCase):
     """
-    Test 1 : Regroupement spatial PostGIS et qualification anti-fausse alerte :
-    - 1 signalement isolé non critique -> reste A_CONFIRMER (fausse alerte éliminée).
-    - >= 2 signalements proches (< 200m) -> alerte CONFIRMEE.
-    - 1 signalement critique direct -> alerte CONFIRMEE immédiatement.
+    Test 1 : Regroupement spatial et qualification anti-fausse alerte sur le Nord-Est du Cap Bon
+    (Kélibia, Hammam El Ghezaz, El Haouaria, Dar Allouche, Kerkouane, Azmour, Menzel Horr).
     """
 
     def test_distance_metres_haversine(self):
-        # Bab El Khadra vers Bab Saadoun (~1.8 km)
-        d = distance_metres(36.8123, 10.1784, 36.8095, 10.1582)
-        self.assertGreater(d, 1500)
-        self.assertLess(d, 2200)
+        # Kélibia Centre vers Hammam El Ghezaz (~5.3 km)
+        d = distance_metres(36.8475, 11.0939, 36.8906, 11.1197)
+        self.assertGreater(d, 4500)
+        self.assertLess(d, 6200)
 
     def test_fausse_alerte_isolee_non_confirmee(self):
         sig = SignalementAccident.objects.create(
-            latitude=36.8340,
-            longitude=10.2330,
-            adresse="Les Berges du Lac",
+            latitude=36.9467,
+            longitude=11.0989,
+            adresse="Route du Site Archéologique, Kerkouane",
             description="Véhicule garé de travers",
-            gravite_estimee="MOYENNE"
+            gravite_estimee="MOYENNE",
         )
         alerte = traiter_signalement(sig, valide_par_agent=False)
 
         self.assertEqual(alerte.statut, 'A_CONFIRMER')
         self.assertEqual(alerte.nb_signalements, 1)
+        self.assertEqual(alerte.zone_nom, 'Kerkouane')
         self.assertIsNone(alerte.date_confirmation)
 
     def test_concordance_deux_signalements_proches_confirme_alerte(self):
-        # 1er signalement
+        # 1er signalement à Kélibia Centre
         sig1 = SignalementAccident.objects.create(
-            latitude=36.8002,
-            longitude=10.1865,
-            adresse="Avenue Habib Bourguiba",
-            description="Choc entre 2 taxis",
-            gravite_estimee="MOYENNE"
+            latitude=36.8475,
+            longitude=11.0939,
+            adresse="Avenue des Martyrs, Kélibia",
+            description="Choc entre 2 véhicules",
+            gravite_estimee="MOYENNE",
         )
         alerte = traiter_signalement(sig1, valide_par_agent=False)
         self.assertEqual(alerte.statut, 'A_CONFIRMER')
 
         # 2ème signalement concordant à ~50 mètres (< 200m)
         sig2 = SignalementAccident.objects.create(
-            latitude=36.8005,
-            longitude=10.1868,
-            adresse="Avenue Habib Bourguiba - Carrefour",
-            description="Accident confirmé Bourguiba",
-            gravite_estimee="MOYENNE"
+            latitude=36.8478,
+            longitude=11.0942,
+            adresse="Place du Marché, Kélibia",
+            description="Accident confirmé Kélibia Centre",
+            gravite_estimee="MOYENNE",
         )
         alerte_mise_a_jour = traiter_signalement(sig2, valide_par_agent=False)
 
-        # Les 2 signalements ont été fusionnés sur la même alerte
         self.assertEqual(alerte.id, alerte_mise_a_jour.id)
         self.assertEqual(alerte_mise_a_jour.nb_signalements, 2)
         self.assertEqual(alerte_mise_a_jour.statut, 'CONFIRME')
         self.assertIsNotNone(alerte_mise_a_jour.date_confirmation)
 
+    def test_villes_differentes_cap_bon_non_fusionnees(self):
+        sig_kelibia = SignalementAccident.objects.create(
+            latitude=36.8475,
+            longitude=11.0939,
+            adresse="Kélibia Centre",
+            description="Accrochage léger Kélibia",
+            gravite_estimee="MOYENNE",
+        )
+        sig_haouaria = SignalementAccident.objects.create(
+            latitude=37.0500,
+            longitude=11.0144,
+            adresse="El Haouaria Centre",
+            description="Accrochage léger El Haouaria",
+            gravite_estimee="MOYENNE",
+        )
+        alerte1 = traiter_signalement(sig_kelibia, valide_par_agent=False)
+        alerte2 = traiter_signalement(sig_haouaria, valide_par_agent=False)
+        self.assertNotEqual(alerte1.id, alerte2.id)
+        self.assertEqual(alerte1.zone_nom, 'Kélibia')
+        self.assertEqual(alerte2.zone_nom, 'El Haouaria')
+
     def test_signalement_critique_confirme_immediatement(self):
         sig_critique = SignalementAccident.objects.create(
-            latitude=36.7865,
-            longitude=10.1832,
-            adresse="Échangeur Bab Alioua",
+            latitude=36.7361,
+            longitude=10.9558,
+            adresse="Corridor MC27, Menzel Horr",
             description="Carambolage grave avec blessés et incendie",
-            gravite_estimee="GRAVE"
+            gravite_estimee="GRAVE",
         )
         alerte = traiter_signalement(sig_critique, valide_par_agent=False)
         self.assertEqual(alerte.statut, 'CONFIRME')
         self.assertEqual(alerte.gravite, 'GRAVE')
+        self.assertEqual(alerte.zone_nom, 'Menzel Horr')
         self.assertIsNotNone(alerte.date_confirmation)
 
 
 class UrgencesWorkflowAuditTestCase(TestCase):
     """
-    Test 2 : Workflow strict d'intervention et Journal d'Audit :
-    'recue' (CONFIRME) -> 'prise_en_charge' -> 'en_cours' (EN_INTERVENTION) -> 'cloturee' (CLOTURE)
+    Test 2 : Workflow strict d'intervention et Journal d'Audit.
     """
 
     def setUp(self):
         self.user = User.objects.create_user(username="agent_pompier_01", password="secure_password")
         self.alerte = AlerteAccident.objects.create(
-            latitude=36.8123,
-            longitude=10.1784,
-            adresse="Avenue Habib Thameur",
+            latitude=36.8475,
+            longitude=11.0939,
+            adresse="Avenue des Martyrs, Kélibia",
+            zone_nom="Kélibia",
             gravite="GRAVE",
-            statut="CONFIRME"
+            statut="CONFIRME",
         )
 
     def test_cycle_de_vie_complet_et_journal_audit(self):
-        # 1. Prise en charge
         enregistrer_changement_statut(
             self.alerte,
             nouveau_statut="PRISE_EN_CHARGE",
             intervenant=self.user,
-            matricule="TN-POMPIER-198",
-            note="Départ Ambulance 198-A"
+            matricule="TN-KELIBIA-198",
+            note="Départ Ambulance 198-Kélibia",
         )
         self.alerte.refresh_from_db()
         self.assertEqual(self.alerte.statut, "PRISE_EN_CHARGE")
@@ -125,26 +138,24 @@ class UrgencesWorkflowAuditTestCase(TestCase):
         audit1 = JournalAuditIntervention.objects.filter(alerte=self.alerte).latest('horodatage')
         self.assertEqual(audit1.statut_precedent, "CONFIRME")
         self.assertEqual(audit1.nouveau_statut, "PRISE_EN_CHARGE")
-        self.assertEqual(audit1.matricule_intervenant, "TN-POMPIER-198")
-        self.assertIn("198-A", audit1.note_intervention)
+        self.assertEqual(audit1.matricule_intervenant, "TN-KELIBIA-198")
+        self.assertIn("198-Kélibia", audit1.note_intervention)
 
-        # 2. En intervention
         enregistrer_changement_statut(
             self.alerte,
             nouveau_statut="EN_INTERVENTION",
             intervenant=self.user,
-            note="Arrivée sur les lieux et balisage"
+            note="Arrivée sur les lieux et balisage",
         )
         self.alerte.refresh_from_db()
         self.assertEqual(self.alerte.statut, "EN_INTERVENTION")
         self.assertIsNotNone(self.alerte.date_en_intervention)
 
-        # 3. Clôture
         enregistrer_changement_statut(
             self.alerte,
             nouveau_statut="CLOTURE",
             intervenant=self.user,
-            note="Blessés évacués vers Hôpital Charles Nicolle, voie dégagée"
+            note="Blessés évacués vers l'Hôpital Régional de Kélibia, voie dégagée",
         )
         self.alerte.refresh_from_db()
         self.assertEqual(self.alerte.statut, "CLOTURE")
@@ -156,7 +167,7 @@ class UrgencesWorkflowAuditTestCase(TestCase):
 
 class UrgencesRiskMapTestCase(TestCase):
     """
-    Test 3 : Moteur Risk Map (0–100 %, vert/orange/rouge, facteurs explicatifs).
+    Test 3 : Moteur Risk Map Nord-Est Cap Bon (0–100 %, vert/orange/rouge).
     """
 
     def test_calcul_score_risk_map_et_facteurs(self):
@@ -172,11 +183,12 @@ class UrgencesRiskMapTestCase(TestCase):
         self.assertEqual(res_eleve["niveau_couleur"], "rouge")
         self.assertTrue(any("dense" in f.lower() or "incidents" in f.lower() for f in res_eleve["facteurs_explicatifs"]))
 
-    def test_evaluation_secteurs_tunis(self):
+    def test_evaluation_secteurs_cap_bon_ne(self):
         zones = get_toutes_les_zones_risk_map()
-        self.assertEqual(len(zones), len(SECTEURS_TUNIS))
+        self.assertEqual(len(zones), len(SECTEURS_CAP_BON))
         for z in zones:
             self.assertIn("zone_nom", z)
+            self.assertIn("delegation", z)
             self.assertIn(z["niveau_couleur"], ["vert", "orange", "rouge"])
             self.assertGreaterEqual(z["score_risque_pourcentage"], 0)
             self.assertLessEqual(z["score_risque_pourcentage"], 100)
@@ -185,8 +197,7 @@ class UrgencesRiskMapTestCase(TestCase):
 
 class UrgencesAssistantLLMTestCase(TestCase):
     """
-    Test 4 : Assistant LLM RAG strict anti-hallucination.
-    Vérifie qu'il s'appuie sur les données réelles et refuse d'inventer des informations.
+    Test 4 : Assistant LLM RAG strict anti-hallucination (Nord-Est Cap Bon).
     """
 
     def test_contexte_terrain_reel(self):
@@ -194,6 +205,7 @@ class UrgencesAssistantLLMTestCase(TestCase):
         self.assertIn("risk_map", ctx)
         self.assertIn("casernes_operationnelles", ctx)
         self.assertIn("alertes_actives", ctx)
+        self.assertIn("Kélibia", ctx["region"])
 
     def test_assistant_repond_avec_donnees_reelles_sans_halluciner(self):
         res_zones = interroger_assistant_llm("Quelles sont les zones rouges prioritaires ?")
@@ -201,18 +213,27 @@ class UrgencesAssistantLLMTestCase(TestCase):
         self.assertIsInstance(res_zones["reponse"], str)
         self.assertIn("score", res_zones["reponse"].lower())
 
-        res_casernes = interroger_assistant_llm("Quelles casernes sont disponibles à Tunis ?")
+        res_casernes = interroger_assistant_llm("Quelles casernes sont disponibles ?")
         self.assertIn("reponse", res_casernes)
-        self.assertIn("Bab El Khadra", res_casernes["reponse"])
+        self.assertIn("Kélibia", res_casernes["reponse"])
+        self.assertIn("El Haouaria", res_casernes["reponse"])
 
 
 class UrgencesSimulationApiTestCase(TestCase):
     """
-    Test 5 : Endpoints de simulation et API.
+    Test 5 : Endpoints de simulation, configuration géo et API.
     """
 
     def setUp(self):
         self.client = APIClient()
+
+    def test_endpoint_geo_config(self):
+        res = self.client.get('/api/urgences/geo-config/')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["region_id"], "cap_bon_ne")
+        for loc in ("Kélibia", "Hammam El Ghezaz", "El Haouaria", "Dar Allouche", "Kerkouane", "Azmour", "Menzel Horr"):
+            self.assertIn(loc, data["delegation_names"])
 
     def test_endpoint_simulation_fausse_alerte(self):
         res = self.client.post('/api/urgences/simulate/', {"mode": "fausse_alerte"}, format='json')
@@ -234,11 +255,11 @@ class UrgencesSimulationApiTestCase(TestCase):
         res = self.client.post('/api/urgences/simulate/', {"mode": "risk_map"}, format='json')
         self.assertEqual(res.status_code, 200)
         data = res.json()
-        self.assertEqual(data["scenario"], "generation_risk_map_tunis")
+        self.assertEqual(data["scenario"], "generation_risk_map_cap_bon")
         self.assertIn("repartition", data)
 
     def test_endpoint_audit_intervention(self):
-        alerte = AlerteAccident.objects.create(latitude=36.8, longitude=10.1, gravite="GRAVE", statut="CONFIRME")
+        alerte = AlerteAccident.objects.create(latitude=36.8475, longitude=11.0939, gravite="GRAVE", statut="CONFIRME")
         enregistrer_changement_statut(alerte, "PRISE_EN_CHARGE", note="Test audit API")
 
         res = self.client.get(f'/api/urgences/alerte/{alerte.id}/audit/')

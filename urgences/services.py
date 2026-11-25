@@ -5,12 +5,24 @@ from django.conf import settings
 from django.utils import timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from config.geo_config import DELEGATIONS_CAP_BON, WS_GROUP_NAME
 from .models import SignalementAccident, AlerteAccident, JournalAudit, JournalAuditIntervention
 
 # Paramètres configurables du regroupement spatial et temporel
-RAYON_PROXIMITE_METRES = getattr(settings, 'URGENCES_RAYON_PROXIMITE_METRES', 200)
+RAYON_PROXIMITE_METRES = getattr(settings, 'URGENCES_RAYON_PROXIMITE_METRES', 250)
 FENETRE_TEMPORELLE_MINUTES = getattr(settings, 'URGENCES_FENETRE_TEMPORELLE_MINUTES', 15)
 SEUIL_CONFIRMATION_CONCORDANCE = getattr(settings, 'URGENCES_SEUIL_CONFIRMATION', 2)
+
+
+def inferer_delegation_proche(lat: float, lon: float) -> str:
+    """Identifie la délégation du Cap Bon la plus proche des coordonnées GPS."""
+    if not DELEGATIONS_CAP_BON:
+        return ""
+    nearest = min(
+        DELEGATIONS_CAP_BON,
+        key=lambda d: distance_metres(lat, lon, d["lat"], d["lng"]),
+    )
+    return nearest["nom"]
 
 def distance_metres(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
@@ -26,15 +38,26 @@ def distance_metres(lat1: float, lon1: float, lat2: float, lon2: float) -> float
 
 def trouver_alerte_proche(lat: float, lon: float, rayon_metres: float = RAYON_PROXIMITE_METRES):
     """
-    Recherche une alerte active existante dans le rayon géographique (par défaut 200m)
-    et dans la fenêtre temporelle de 15 minutes.
+    Recherche une alerte active existante dans le rayon géographique configurable
+    et dans la fenêtre temporelle de 15 minutes, avec pré-filtrage bounding box SQL.
     """
     fenetre_temps = timezone.now() - timedelta(minutes=FENETRE_TEMPORELLE_MINUTES)
-    alertes_actives = AlerteAccident.objects.filter(
-        date_creation__gte=fenetre_temps
-    ).exclude(statut='CLOTURE')
+    delta_lat = (rayon_metres / 111000.0) * 1.5
+    cos_lat = max(0.2, abs(math.cos(math.radians(lat))))
+    delta_lon = delta_lat / cos_lat
 
-    # Filtrage par distance métrique
+    alertes_actives = (
+        AlerteAccident.objects.filter(
+            date_creation__gte=fenetre_temps,
+            latitude__gte=lat - delta_lat,
+            latitude__lte=lat + delta_lat,
+            longitude__gte=lon - delta_lon,
+            longitude__lte=lon + delta_lon,
+        )
+        .exclude(statut='CLOTURE')
+    )
+
+    # Filtrage exact par distance géodésique Haversine
     for alerte in alertes_actives:
         if distance_metres(lat, lon, alerte.latitude, alerte.longitude) <= rayon_metres:
             return alerte
@@ -67,6 +90,7 @@ def traiter_signalement(
             latitude=signalement.latitude,
             longitude=signalement.longitude,
             adresse=signalement.adresse or f"GPS ({signalement.latitude:.4f}, {signalement.longitude:.4f})",
+            zone_nom=inferer_delegation_proche(signalement.latitude, signalement.longitude),
             gravite='GRAVE' if signalement.gravite_estimee in ('GRAVE', 'CRITIQUE') else signalement.gravite_estimee,
             statut='A_CONFIRMER',
             nb_signalements=1
@@ -185,7 +209,7 @@ def diffuser_alerte_temps_reel(alerte: AlerteAccident):
             channel_layer = get_channel_layer()
             if channel_layer:
                 async_to_sync(channel_layer.group_send)(
-                    "protection_civile_tunis",
+                    WS_GROUP_NAME,
                     {
                         "type": "envoyer_alerte",
                         "data": alerte_data
@@ -217,7 +241,7 @@ def diffuser_changement_statut(alerte: AlerteAccident):
             channel_layer = get_channel_layer()
             if channel_layer:
                 async_to_sync(channel_layer.group_send)(
-                    "protection_civile_tunis",
+                    WS_GROUP_NAME,
                     {
                         "type": "mise_a_jour_statut",
                         "data": alerte_data

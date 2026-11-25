@@ -9,6 +9,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 import {
+  addStandardBasemapLayer,
+  getGeoConfig,
+  getRegionLeafletBounds,
+  renderLocalityLabelsLayer,
+} from '../config/geoConfig';
+import {
   AlerteAnomalieItem,
   Signalement,
   TrafficSegment,
@@ -26,12 +32,6 @@ interface MunicipalHeatmapProps {
   onFilterZone?: (quartier: string, categorie?: string) => void;
   onSelectSignalement?: (sig: Signalement) => void;
 }
-
-const GRAND_TUNIS_CENTER: [number, number] = [36.8123, 10.1784];
-const GRAND_TUNIS_BOUNDS: [[number, number], [number, number]] = [
-  [36.45, 9.85],
-  [37.18, 10.58],
-];
 
 const CATEGORIE_LABELS: Record<string, string> = {
   ACCIDENT: 'Accident / Urgence',
@@ -168,7 +168,7 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
       const palette = paletteRef.current;
 
       const zoom = map.getZoom();
-      const radius = Math.max(20, Math.min(48, (zoom - 8) * 7.5));
+      const radius = Math.max(16, Math.min(48, (zoom - 7.5) * 7.0));
 
       for (let i = 0; i < points.length; i += 1) {
         const [lat, lng, weight] = points[i];
@@ -217,20 +217,20 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
     const container = containerRef.current;
     if (!container || mapRef.current) return;
 
+    const geoCfg = getGeoConfig();
+    const regionBounds = getRegionLeafletBounds(geoCfg);
     const map = L.map(container, {
-      center: GRAND_TUNIS_CENTER,
-      zoom: 12,
-      minZoom: 10,
-      maxZoom: 18,
-      maxBounds: GRAND_TUNIS_BOUNDS,
-      maxBoundsViscosity: 0.85,
+      center: geoCfg.map.center,
+      zoom: geoCfg.map.zoom,
+      minZoom: geoCfg.map.min_zoom,
+      maxZoom: geoCfg.map.max_zoom,
+      maxBounds: regionBounds,
+      maxBoundsViscosity: 1.0,
       attributionControl: false,
       zoomControl: true,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-    }).addTo(map);
+    addStandardBasemapLayer(map);
 
     const heatmapPane = map.createPane('heatmapPane');
     heatmapPane.style.zIndex = '410';
@@ -249,6 +249,8 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
 
     trafficLayerRef.current = L.layerGroup().addTo(map);
     riskLayerRef.current = L.layerGroup().addTo(map);
+    const labelsLayer = L.layerGroup().addTo(map);
+    renderLocalityLabelsLayer(labelsLayer, geoCfg.delegations);
     hotspotsLayerRef.current = L.layerGroup().addTo(map);
     markersLayerRef.current = L.layerGroup().addTo(map);
     anomaliesLayerRef.current = L.layerGroup().addTo(map);
@@ -269,6 +271,7 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
 
     window.setTimeout(() => {
       map.invalidateSize({ animate: false });
+      map.fitBounds(regionBounds, { padding: [20, 20] });
       triggerRedraw();
     }, 120);
 
@@ -436,7 +439,7 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
       });
 
       marker.bindTooltip(
-        `${sig.quartier || 'Tunis'} · ${CATEGORIE_LABELS[sig.categorie] || sig.categorie} (${sig.statut})`,
+        `${sig.quartier || getGeoConfig().default_city} · ${CATEGORIE_LABELS[sig.categorie] || sig.categorie} (${sig.statut})`,
         { direction: 'top' }
       );
 
@@ -459,9 +462,11 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
       if (!seg.coordinates || seg.coordinates.length < 2) return;
       const line = L.polyline(seg.coordinates, {
         color: seg.color || '#38bdf8',
-        weight: seg.congestion_level === 'BLOCKED' || seg.congestion_level === 'HEAVY' ? 5 : 3.5,
+        weight: 3,
         opacity: 0.85,
       });
+      line.on('mouseover', () => line.setStyle({ weight: 4, opacity: 1 }));
+      line.on('mouseout', () => line.setStyle({ weight: 3, opacity: 0.85 }));
 
       line.bindTooltip(
         `${seg.name} (${seg.zone}) · ${seg.current_speed_kmh} km/h · Indice ${(seg.congestion_index * 100).toFixed(0)}%`,
@@ -487,7 +492,7 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
             : '#10b981';
 
       const circle = L.circle([rz.latitude, rz.longitude], {
-        radius: 650,
+        radius: Math.min(2000, Math.max(700, rz.rayon_zone_m || 1200)),
         color,
         weight: 1.5,
         fillColor: color,
@@ -543,7 +548,7 @@ export const MunicipalHeatmap: React.FC<MunicipalHeatmapProps> = ({
             }}
           >
             <Flame size={16} color="#f59e0b" />
-            <span>Carte de Chaleur &amp; Corrélation Urbaine (Grand Tunis)</span>
+            <span>Carte de Chaleur &amp; Corrélation Régionale ({getGeoConfig().region_short_name})</span>
           </h3>
           <p
             style={{

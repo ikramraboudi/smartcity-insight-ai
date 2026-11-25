@@ -2,6 +2,13 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import L from 'leaflet';
 import type { Alerte, Caserne, RouteInfo, ZoneRiskMap } from '../types';
 import {
+  addStandardBasemapLayer,
+  FALLBACK_CASERNES_CAP_BON,
+  getGeoConfig,
+  getRegionLeafletBounds,
+  renderLocalityLabelsLayer,
+} from '../config/geoConfig';
+import {
   fetchTrafficSegments,
   calculateSimulatorRouteDelay,
   fetchZonesRiskMap,
@@ -34,10 +41,16 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
   // Leaflet map instances
   const leafletMapRef = useRef<L.Map | null>(null);
+  const leafletLabelsLayerRef = useRef<L.LayerGroup | null>(null);
   const leafletMarkersRef = useRef<L.LayerGroup | null>(null);
   const leafletTrafficLayerRef = useRef<L.LayerGroup | null>(null);
   const leafletRiskLayerRef = useRef<L.LayerGroup | null>(null);
   const leafletRouteLayerRef = useRef<L.Polyline | null>(null);
+  const selectedAlerteRef = useRef<Alerte | null>(selectedAlerte);
+
+  useEffect(() => {
+    selectedAlerteRef.current = selectedAlerte;
+  }, [selectedAlerte]);
 
 
   // Distance Haversine helper
@@ -59,17 +72,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     (alerte: Alerte): Caserne => {
       if (selectedCaserne) return selectedCaserne;
       if (casernes.length === 0) {
-        return {
-          id: 'def',
-          nom: 'Caserne Centrale - Bab El Khadra',
-          adresse: 'Avenue Habib Thameur / Bab El Khadra, Tunis',
-          latitude: 36.8123,
-          longitude: 10.1784,
-          telephone: '198',
-          ambulances_disponibles: 3,
-          camions_disponibles: 2,
-          statut: 'OPERATIONNELLE',
-        };
+        return FALLBACK_CASERNES_CAP_BON[0];
       }
       let nearest = casernes[0];
       let minDis = calculateDistanceKm(alerte.latitude, alerte.longitude, nearest.latitude, nearest.longitude);
@@ -85,55 +88,58 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     [casernes, selectedCaserne]
   );
 
-  // 1. Initialiser la carte Leaflet sur le Grand Tunis avec gestion robuste du redimensionnement
+  // 1. Initialiser la carte Leaflet sur le Nord-Est du Cap Bon avec cadrage optimal
   useEffect(() => {
     if (!mapContainerRef.current) return;
     if (leafletMapRef.current) return;
 
-    // Définir les limites géographiques de restriction sur le Grand Tunis
-    const tunisBounds = L.latLngBounds(
-      L.latLng(36.4, 9.8), // Sud-Ouest
-      L.latLng(37.2, 10.6)  // Nord-Est
-    );
+    const geoCfg = getGeoConfig();
+    const regionBounds = getRegionLeafletBounds(geoCfg);
 
     const map = L.map(mapContainerRef.current, {
-      center: [36.8123, 10.1784], // Bab El Khadra / Avenue Habib Bourguiba
-      zoom: 13,
-      minZoom: 11,
-      maxZoom: 18,
-      maxBounds: tunisBounds,
-      maxBoundsViscosity: 0.85,
-      zoomControl: false, // On va le positionner proprement
+      center: geoCfg.map.center,
+      zoom: geoCfg.map.zoom,
+      minZoom: geoCfg.map.min_zoom,
+      maxZoom: geoCfg.map.max_zoom,
+      maxBounds: regionBounds,
+      maxBoundsViscosity: 1.0,
+      zoomControl: false,
     });
 
     // Repositionner le contrôle de zoom en haut à gauche
     L.control.zoom({ position: 'topleft' }).addTo(map);
 
-    // Couche OpenStreetMap officielle 100% libre et gratuite (aucune clé requise, aucun filigrane)
-    const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    });
-    osmLayer.addTo(map);
+    // Couche OpenStreetMap standard (sans filtre CSS)
+    addStandardBasemapLayer(map);
 
-    leafletMarkersRef.current = L.layerGroup().addTo(map);
     leafletTrafficLayerRef.current = L.layerGroup().addTo(map);
     leafletRiskLayerRef.current = L.layerGroup().addTo(map);
+    leafletLabelsLayerRef.current = L.layerGroup().addTo(map);
+    leafletMarkersRef.current = L.layerGroup().addTo(map);
     leafletMapRef.current = map;
 
-    // Correction essentielle : Invalidation immédiate et différée pour flexbox & redimensionnement
-    const triggerResize = () => {
-      if (map) {
-        map.invalidateSize();
-      }
+    renderLocalityLabelsLayer(leafletLabelsLayerRef.current, geoCfg.delegations);
+
+    const fitWorkingZone = () => {
+      if (!mapContainerRef.current) return;
+      map.invalidateSize();
+      map.fitBounds(regionBounds, { padding: [20, 20] });
     };
 
-    triggerResize();
-    const t1 = setTimeout(triggerResize, 100);
-    const t2 = setTimeout(triggerResize, 350);
+    fitWorkingZone();
+    const t1 = setTimeout(() => {
+      if (!selectedAlerteRef.current) {
+        fitWorkingZone();
+      } else {
+        map.invalidateSize();
+      }
+    }, 100);
+    const t2 = setTimeout(() => {
+      map.invalidateSize();
+    }, 350);
 
     const resizeObserver = new ResizeObserver(() => {
-      triggerResize();
+      map.invalidateSize();
     });
     resizeObserver.observe(mapContainerRef.current);
 
@@ -141,6 +147,10 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       clearTimeout(t1);
       clearTimeout(t2);
       resizeObserver.disconnect();
+      if (leafletLabelsLayerRef.current) {
+        leafletLabelsLayerRef.current.clearLayers();
+        leafletLabelsLayerRef.current = null;
+      }
       if (leafletRiskLayerRef.current) {
         leafletRiskLayerRef.current.clearLayers();
         leafletRiskLayerRef.current = null;
@@ -168,8 +178,8 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       const fireIcon = L.divIcon({
         className: 'custom-fire-marker',
         html: '🚒',
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
       });
 
       const m = L.marker([c.latitude, c.longitude], { icon: fireIcon });
@@ -201,8 +211,8 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       const accidentIcon = L.divIcon({
         className: cls,
         html: '🚨',
-        iconSize: [40, 40],
-        iconAnchor: [20, 20],
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
       });
 
       const m = L.marker([a.latitude, a.longitude], { icon: accidentIcon });
@@ -228,7 +238,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     });
   }, [casernes, alertes, onSelectAlerte]);
 
-  // 3. Affichage de la couche de trafic simulé en temps réel (Grand Tunis)
+  // 3. Affichage de la couche de trafic simulé en temps réel (Cap Bon)
   useEffect(() => {
     if (!leafletMapRef.current) return;
     if (!leafletTrafficLayerRef.current) {
@@ -250,10 +260,17 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       segments.forEach((seg) => {
         const poly = L.polyline(seg.coordinates as [number, number][], {
           color: seg.color,
-          weight: seg.has_incident ? 8 : seg.congestion_index >= 3.2 ? 6 : 5,
+          weight: 3,
           opacity: 0.85,
           lineCap: 'round',
           lineJoin: 'round',
+        });
+
+        poly.on('mouseover', () => {
+          poly.setStyle({ weight: 4, opacity: 1 });
+        });
+        poly.on('mouseout', () => {
+          poly.setStyle({ weight: 3, opacity: 0.85 });
         });
 
         poly.bindPopup(`
@@ -318,7 +335,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           : '#10b981';
 
       const circle = L.circle([z.latitude, z.longitude], {
-        radius: 380,
+        radius: Math.min(1800, Math.max(550, z.rayon_zone_m || 1100)),
         color: color,
         fillColor: color,
         fillOpacity: 0.22,
@@ -405,7 +422,8 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     let isCancelled = false;
 
     const computeAndNotifyRoute = async () => {
-      let rawDuration = Math.round((dis / 38) * 60) + 1;
+      const avgSpeedKmh = dis > 8 ? 65 : 45;
+      let rawDuration = Math.round((dis / avgSpeedKmh) * 60) + 1;
       let durationWithTraffic = rawDuration + (trafficLayerActive ? 2 : 0);
       let trafficDelay = trafficLayerActive ? 2 : 0;
       let warningMsg: string | undefined = undefined;
@@ -454,11 +472,12 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     };
   }, [selectedAlerte, selectedCaserne, trafficLayerActive, getNearestCaserne, onRouteCalculated]);
 
-  // Bouton de recentrage rapide sur Tunis
+  // Bouton de recentrage rapide sur la zone Kélibia / Nord-Est Cap Bon
   const handleRecenter = () => {
     if (leafletMapRef.current) {
-      leafletMapRef.current.setView([36.8123, 10.1784], 13);
+      const geoCfg = getGeoConfig();
       leafletMapRef.current.invalidateSize();
+      leafletMapRef.current.fitBounds(getRegionLeafletBounds(geoCfg), { padding: [20, 20] });
     }
   };
 
@@ -488,10 +507,10 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           gap: '8px',
         }}
       >
-        {/* Recentrage sur Tunis */}
+        {/* Recentrage sur le Cap Bon */}
         <button
           onClick={handleRecenter}
-          title="Recentrer la carte sur Tunis Centre"
+          title="Recentrer la carte sur le Cap Bon (Gouvernorat de Nabeul)"
           style={{
             backgroundColor: '#0f172a',
             border: '1px solid #334155',

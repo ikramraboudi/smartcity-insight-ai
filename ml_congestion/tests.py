@@ -11,7 +11,7 @@ from .predictor import (
     recommend_alternative_routes,
     load_trained_models,
 )
-from .data_pipeline import TUNIS_STREETS
+from .data_pipeline import CAP_BON_STREETS
 
 
 class ModuleDCongestionMLTests(TestCase):
@@ -21,11 +21,11 @@ class ModuleDCongestionMLTests(TestCase):
         cls.client = APIClient()
 
     def test_predict_congestion_by_street_format(self):
-        """Vérifie que la prédiction par rue renvoie l'indicateur précis pour les 12 artères."""
+        """Vérifie que la prédiction par rue renvoie l'indicateur précis pour les axes du Nord-Est Cap Bon."""
         dt = "2026-11-23T08:30:00"  # Lundi 08h30 (Pointe matin)
         preds = predict_congestion_by_street(simulation_datetime=dt, chantiers=[], meteo_pluie=0)
 
-        self.assertEqual(len(preds), len(TUNIS_STREETS))
+        self.assertEqual(len(preds), len(CAP_BON_STREETS))
         for p in preds:
             self.assertIn("street_id", p)
             self.assertIn("congestion_index", p)
@@ -44,7 +44,7 @@ class ModuleDCongestionMLTests(TestCase):
         """Vérifie que l'impact d'un chantier calcule bien le surcroît de risque (Δ)."""
         dt = "2026-11-23T08:30:00"
         impact = estimate_worksite_impact(
-            street_id="seg_route_x_sud",
+            street_id="seg_menzel_horr_mc27",
             simulation_datetime=dt,
             meteo_pluie=0,
         )
@@ -62,9 +62,9 @@ class ModuleDCongestionMLTests(TestCase):
         """Vérifie la recommandation d'itinéraires alternatifs lors d'une forte congestion."""
         dt = "2026-11-23T08:30:00"
         rec = recommend_alternative_routes(
-            street_id="seg_route_x_sud",
+            street_id="seg_menzel_horr_mc27",
             simulation_datetime=dt,
-            chantiers=["seg_route_x_sud"],
+            chantiers=["seg_menzel_horr_mc27"],
             meteo_pluie=1,
         )
 
@@ -80,7 +80,7 @@ class ModuleDCongestionMLTests(TestCase):
             "/api/ml/congestion/predict/",
             data={
                 "simulation_datetime": "2026-11-23T08:30:00",
-                "chantiers": ["seg_route_x_sud"],
+                "chantiers": ["seg_menzel_horr_mc27"],
                 "meteo_pluie": 1,
             },
             format="json",
@@ -88,7 +88,7 @@ class ModuleDCongestionMLTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "success")
-        self.assertEqual(len(data["predictions"]), 12)
+        self.assertEqual(len(data["predictions"]), len(CAP_BON_STREETS))
         self.assertEqual(len(data["worksite_impacts"]), 1)
 
     def test_api_metrics_endpoint(self):

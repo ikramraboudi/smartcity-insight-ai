@@ -18,6 +18,7 @@ import {
   Phone,
   Users,
 } from 'lucide-react';
+import { getGeoConfig } from '../config/geoConfig';
 import {
   loginMunicipal,
   registerAccount,
@@ -88,14 +89,7 @@ const ROLES_CONFIG: Record<PlatformRole, RoleConfig> = {
   },
 };
 
-const ARRONDISSEMENTS_PRESETS = [
-  'Arrondissement Bab Bhar (1001)',
-  'Arrondissement El Menzah (1004)',
-  'Arrondissement La Goulette (2060)',
-  'Arrondissement Le Bardo (2000)',
-  'Arrondissement Lafayette (1002)',
-  'Arrondissement Ariana Centre (2080)',
-];
+const ARRONDISSEMENTS_PRESETS = getGeoConfig().circonscriptions;
 
 export interface UnifiedAuthPortalProps {
   onLoginSuccess?: (session: UserSession) => void;
@@ -114,9 +108,11 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
   const [showPassword, setShowPassword] = useState(false);
 
   // Champs injectés dynamiquement selon le rôle
-  const [codeArrondissement, setCodeArrondissement] = useState('Arrondissement Bab Bhar (1001)');
+  const [codeArrondissement, setCodeArrondissement] = useState(
+    ARRONDISSEMENTS_PRESETS[0] || 'Commune Kélibia (8090)'
+  );
   const [telephoneCin, setTelephoneCin] = useState('');
-  const [matriculeAgent, setMatriculeAgent] = useState('PC-TUNIS-741');
+  const [matriculeAgent, setMatriculeAgent] = useState('PC-KELIBIA-198');
 
   // États UI
   const [isLoading, setIsLoading] = useState(false);
@@ -131,7 +127,7 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
     if (role === 'RESPONSABLE_MUNICIPAL') {
       setEmail('responsable_mairie');
       setPassword('Mairie2026!');
-      setCodeArrondissement('Arrondissement Bab Bhar (1001)');
+      setCodeArrondissement(ARRONDISSEMENTS_PRESETS[0] || 'Commune Kélibia (8090)');
     } else if (role === 'CITOYEN') {
       setEmail('citoyen_demo');
       setPassword('Citoyen2026!');
@@ -139,7 +135,7 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
     } else if (role === 'PROTECTION_CIVILE') {
       setEmail('agent_pc@protection-civile.tn');
       setPassword('PC2026!');
-      setMatriculeAgent('PC-TUNIS-741');
+      setMatriculeAgent('PC-KELIBIA-198');
     }
   };
 
@@ -159,7 +155,7 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
     } else if (role === 'PROTECTION_CIVILE') {
       setEmail('agent_pc@protection-civile.tn');
       setPassword('PC2026!');
-      setMatriculeAgent('PC-TUNIS-741');
+      setMatriculeAgent('PC-KELIBIA-198');
     }
   };
 
@@ -831,7 +827,7 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
                       marginBottom: 6,
                     }}
                   >
-                    Code / Arrondissement Municipal <span style={{ color: '#ef4444' }}>*</span>
+                    Code / Délégation Municipale <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <div
                     style={{
@@ -959,7 +955,7 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
                       required
                       value={matriculeAgent}
                       onChange={(e) => setMatriculeAgent(e.target.value)}
-                      placeholder="ex: PC-TUNIS-741 / BADGE-89"
+                      placeholder="ex: PC-KELIBIA-198 / BADGE-89"
                       style={{
                         flex: 1,
                         background: 'transparent',
@@ -1098,7 +1094,7 @@ export const UnifiedAuthPortal: React.FC<UnifiedAuthPortalProps> = ({ onLoginSuc
                   ? 'responsable_mairie / Mairie2026!'
                   : selectedRole === 'CITOYEN'
                     ? 'citoyen_demo / Citoyen2026!'
-                    : 'agent_pc / PC2026! (PC-TUNIS-741)'}
+                    : 'agent_pc / PC2026! (PC-KELIBIA-198)'}
               </div>
               <button
                 type="button"

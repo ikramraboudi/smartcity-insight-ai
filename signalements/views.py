@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 from datetime import datetime, time as dt_time, timedelta
+import math
 from django.contrib.auth import authenticate
 from django.db import connection
 from django.utils import timezone
@@ -11,6 +12,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
+from config.geo_config import DEFAULT_CITY, SPATIAL_CONFIG
 from urgences.services import distance_metres
 from .authentication import generate_jwt_token, get_user_role
 from .models import AlerteAnomalie, Signalement, is_responsable_municipal
@@ -69,23 +71,25 @@ def _trouver_doublon_spatial_temporel(
     categorie: str,
     lat: float,
     lon: float,
-    rayon_metres: float = 50.0,
-    minutes: int = 10,
+    rayon_metres: float = SPATIAL_CONFIG['doublon_rayon_metres'],
+    minutes: int = SPATIAL_CONFIG['doublon_fenetre_minutes'],
 ):
     """
     Détecte si un signalement actif de la même catégorie existe déjà
     dans un rayon de 50 mètres et au cours des 10 dernières minutes.
     """
     fenetre = timezone.now() - timedelta(minutes=minutes)
-    delta_deg = (rayon_metres / 111000.0) * 1.5
+    delta_lat = (rayon_metres / 111000.0) * 1.5
+    cos_lat = max(0.2, abs(math.cos(math.radians(lat))))
+    delta_lon = delta_lat / cos_lat
     candidats = (
         Signalement.objects.filter(
             categorie=categorie,
             date_creation__gte=fenetre,
-            latitude__gte=lat - delta_deg,
-            latitude__lte=lat + delta_deg,
-            longitude__gte=lon - delta_deg,
-            longitude__lte=lon + delta_deg,
+            latitude__gte=lat - delta_lat,
+            latitude__lte=lat + delta_lat,
+            longitude__gte=lon - delta_lon,
+            longitude__lte=lon + delta_lon,
         )
         .exclude(statut=Signalement.Statut.REJETE_SPAM)
         .order_by('-date_creation')
@@ -107,7 +111,7 @@ class SignalementViewSet(viewsets.ModelViewSet):
         statistiques avancées (/statistiques/) et supervision globale (/supervision/).
 
     Filtres disponibles :
-      - ?quartier=Centre-Ville Tunis
+      - ?quartier=Nabeul
       - ?statut=EN_ATTENTE
       - ?categorie=NID_DE_POULE
     """
@@ -341,11 +345,13 @@ class SignalementViewSet(viewsets.ModelViewSet):
         })
 
         voirie_active = 0
+        grid_step_deg = float(SPATIAL_CONFIG['grid_step_deg'])
+        max_hotspots = int(SPATIAL_CONFIG['max_hotspots_zones'])
         for r in rows:
             st = r['statut']
             cat = r['categorie']
             grav = r['gravite']
-            qtr = r['quartier'] or 'Tunis'
+            qtr = r['quartier'] or DEFAULT_CITY
 
             par_statut[st] += 1
             par_categorie[cat] += 1
@@ -374,8 +380,8 @@ class SignalementViewSet(viewsets.ModelViewSet):
             if st != Signalement.Statut.REJETE_SPAM:
                 heatmap_points.append([round(lat, 6), round(lng, 6), w])
 
-                # Agrégation spatiale par grille (~500m : 0.0045 deg)
-                cell_key = (round(lat / 0.0045) * 0.0045, round(lng / 0.0045) * 0.0045)
+                # Agrégation spatiale par grille régionale configurable
+                cell_key = (round(lat / grid_step_deg) * grid_step_deg, round(lng / grid_step_deg) * grid_step_deg)
                 cell = grid_cells[cell_key]
                 cell['lats'].append(lat)
                 cell['lngs'].append(lng)
@@ -414,10 +420,14 @@ class SignalementViewSet(viewsets.ModelViewSet):
         chantiers_actifs = en_cours_count + confirmes_count
         incidents_en_attente = par_statut.get(Signalement.Statut.EN_ATTENTE, 0)
 
-        # Zones à forte densité (PostGIS ST_SnapToGrid si PostgreSQL/PostGIS sans filtre complexe, sinon grille optimisée)
+        # Zones à forte densité (PostGIS ST_SnapToGrid si PostgreSQL/PostGIS sans filtre actif, sinon grille optimisée)
+        has_active_filters = any(
+            request.query_params.get(k) not in (None, '', 'TOUS')
+            for k in ('quartier', 'statut', 'categorie', 'gravite', 'periode', 'date_debut', 'date_fin', 'mes_signalements')
+        )
         zones_haute_densite = []
         used_postgis = False
-        if connection.vendor == 'postgresql' and 'gis' in connection.settings_dict.get('ENGINE', ''):
+        if not has_active_filters and connection.vendor == 'postgresql' and 'gis' in connection.settings_dict.get('ENGINE', ''):
             try:
                 with connection.cursor() as cursor:
                     cursor.execute(
@@ -429,10 +439,11 @@ class SignalementViewSet(viewsets.ModelViewSet):
                             COUNT(*) AS nb_sig
                         FROM signalements_signalement
                         WHERE statut != 'REJETE_SPAM'
-                        GROUP BY ST_SnapToGrid(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), 0.0045)
+                        GROUP BY ST_SnapToGrid(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), %s)
                         ORDER BY nb_sig DESC
-                        LIMIT 8
-                        """
+                        LIMIT %s
+                        """,
+                        [grid_step_deg, max_hotspots],
                     )
                     for lat_c, lng_c, zone_lbl, nb_sig in cursor.fetchall():
                         zones_haute_densite.append({
@@ -463,7 +474,7 @@ class SignalementViewSet(viewsets.ModelViewSet):
                     'categorie_dominante': cell['categories'].most_common(1)[0][0],
                 })
             zones_haute_densite.sort(key=lambda z: (z['score_densite'], z['nb_signalements']), reverse=True)
-            zones_haute_densite = zones_haute_densite[:8]
+            zones_haute_densite = zones_haute_densite[:max_hotspots]
 
         # Série temporelle ordonnée (jusqu'aux 14 derniers jours actifs ou fenêtre continue de 7j si vide)
         if daily_buckets:

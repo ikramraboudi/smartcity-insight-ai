@@ -1,4 +1,4 @@
-# SmartCity Insight AI — Plateforme Métropolitaine de Tunis 🏙️🚨
+# SmartCity Insight AI — Plateforme Nord-Est du Cap Bon (Kélibia • Hammam El Ghezaz • El Haouaria) 🏙️🚨
 
 Plateforme intelligente et distribuée de détection rapide des urgences routières (< 5s), de signalements citoyens participatifs, de maintenance de la voirie et d'aide à la décision municipale.
 
@@ -72,7 +72,8 @@ Ouvrez ensuite votre navigateur sur **http://localhost:5173**.
 | Méthode | Endpoint | Description | Responsable |
 |---|---|---|---|
 | `GET` | `/api/urgences/alertes/` | Liste des alertes d'accidents récentes | Étudiant 3 |
-| `GET` | `/api/urgences/casernes/` | Liste des casernes de pompiers du Grand Tunis | Étudiant 3 |
+| `GET` | `/api/urgences/geo-config/` | Configuration géographique centralisée du Nord-Est Cap Bon (centre, zoom, limites, localités) | Architecture |
+| `GET` | `/api/urgences/casernes/` | Liste des casernes de pompiers du Nord-Est Cap Bon (Kélibia, Hammam El Ghezaz, El Haouaria, Azmour / Menzel Horr) | Étudiant 3 |
 | `POST` | `/api/urgences/simuler-accident/` | Déclenche un accident test et diffuse l'alerte en direct | Étudiant 3 |
 | `POST` | `/api/urgences/recevoir-accident/` | **Passerelle d'intégration :** Reçoit les signalements citoyens | Étud 2 ➔ Étud 3 |
 | `POST` | `/api/urgences/alerte/{id}/statut/` | Met à jour le statut (`PRISE_EN_CHARGE`, `EN_INTERVENTION`, `CLOTURE`) | Étudiant 3 |
@@ -89,7 +90,7 @@ Pour pallier l'absence ou la limitation de facturation de l'API Google Maps Traf
 - **Console Web de Contrôle :** `http://localhost:8001/`
 - **Documentation OpenAPI (Swagger) :** `http://localhost:8001/docs`
 - **Intégration directe :**
-  - **Carte Leaflet (`GoogleMapComponent.tsx`)** : Affichage des polylignes des 12 artères de Tunis (Vert, Orange, Rouge, Bloqué) avec vitesse en direct et infobulles interactives lors de l'activation du bouton *Trafic Direct*.
+  - **Carte Leaflet (`GoogleMapComponent.tsx`)** : Affichage des polylignes des 8 axes routiers du Nord-Est Cap Bon (Vert, Orange, Rouge, Bloqué) avec vitesse en direct et infobulles interactives lors de l'activation du bouton *Trafic Direct*.
   - **Calcul d'Itinéraire d'Urgence (`RoutePanel.tsx`)** : Calcul en temps réel de la durée de trajet et du retard effectif selon les tronçons traversés par l'ambulance.
   - **Modèle IA Risk Map (`RiskMapModal.tsx`)** : Bouton d'auto-synchronisation de l'indice de trafic (`trafic_index`) pour la prédiction Random Forest.
   - **Passerelle Django (`urgences/views.py`)** : Déclaration automatique d'un bouchon d'accident au simulateur lors d'une alerte et déblocage progressif à la clôture.

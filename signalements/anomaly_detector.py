@@ -17,6 +17,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from config.geo_config import DEFAULT_COORDS, SPATIAL_CONFIG
 from urgences.services import distance_metres
 from .models import AlerteAnomalie, Signalement
 
@@ -38,8 +39,8 @@ _cached_pipeline: Optional[Pipeline] = None
 
 def _build_reference_baseline_dataframe() -> pd.DataFrame:
     """
-    Génère un socle de référence calibré représentant l'activité urbaine normale
-    d'un arrondissement tunisois sur des fenêtres de 6 heures (1 à 2 signalements
+    Génère un socle de référence calibré représentant l'activité normale
+    d'une délégation du Cap Bon sur des fenêtres de 6 heures (1 à 2 signalements
     espacés de gravité modérée), afin d'éviter les faux positifs à froid lorsque
     l'historique en base de données est encore restreint.
     """
@@ -160,8 +161,8 @@ def _compute_window_features(
     count = len(items)
     if count == 0:
         return {
-            'lat_centre': 36.8065,
-            'lng_centre': 10.1815,
+            'lat_centre': DEFAULT_COORDS['latitude'],
+            'lng_centre': DEFAULT_COORDS['longitude'],
             'features': {c: 0.0 for c in FEATURE_COLUMNS},
         }
 
@@ -177,7 +178,9 @@ def _compute_window_features(
         mean_disp_m = 500.0
 
     # Plus les signalements sont proches du centroïde, plus la concentration approche 1.0
-    concentration_spatiale = 1.0 / (1.0 + (mean_disp_m / 150.0))
+    # Échelle calibrée pour les délégations multi-quartiers du Cap Bon
+    spatial_scale_m = float(SPATIAL_CONFIG.get('anomaly_spatial_scale_m', 400.0))
+    concentration_spatiale = 1.0 / (1.0 + (mean_disp_m / spatial_scale_m))
 
     high_grav_count = sum(
         1 for it in items

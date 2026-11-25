@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import {
   Flame,
@@ -11,7 +11,7 @@ import { CitizenReportForm } from './components/CitizenReportForm';
 import { MunicipalDashboard } from './components/MunicipalDashboard';
 import { ProtectionCivilePage } from './pages/ProtectionCivilePage';
 import { UnifiedAuthPortal } from './components/UnifiedAuthPortal';
-import { clearActiveSession, getActiveSession } from './services/api';
+import { clearActiveSession, fetchGeoConfig, getActiveSession } from './services/api';
 import { UserSession } from './types';
 
 /**
@@ -204,6 +204,10 @@ const ConnectedNavBar: React.FC<ConnectedNavBarProps> = ({ session, onLogout }) 
 export const App: React.FC = () => {
   // Session utilisateur active (persiste en localStorage)
   const [session, setSession] = useState<UserSession | null>(() => getActiveSession());
+
+  useEffect(() => {
+    void fetchGeoConfig();
+  }, []);
 
   const handleLoginSuccess = (newSession: UserSession) => {
     setSession(newSession);

@@ -55,7 +55,7 @@ def run_demonstration():
 
     predictions = predict_congestion_by_street(
         simulation_datetime=test_dt,
-        chantiers=["seg_route_x_sud"],
+        chantiers=["seg_menzel_horr_mc27"],
         meteo_pluie=1,  # Simulation par temps de pluie
     )
 
@@ -78,7 +78,7 @@ def run_demonstration():
     print("=" * 80)
 
     impact = estimate_worksite_impact(
-        street_id="seg_route_x_sud",
+        street_id="seg_menzel_horr_mc27",
         simulation_datetime=test_dt,
         meteo_pluie=1,
     )
@@ -102,9 +102,9 @@ def run_demonstration():
     print("=" * 80)
 
     alt_rec = recommend_alternative_routes(
-        street_id="seg_route_x_sud",
+        street_id="seg_menzel_horr_mc27",
         simulation_datetime=test_dt,
-        chantiers=["seg_route_x_sud"],
+        chantiers=["seg_menzel_horr_mc27"],
         meteo_pluie=1,
     )
 

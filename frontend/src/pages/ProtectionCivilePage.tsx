@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getGeoConfig } from '../config/geoConfig';
 import { Header } from '../components/Header';
 import { AlertsList } from '../components/AlertsList';
 import { GoogleMapComponent } from '../components/GoogleMapComponent';
@@ -236,7 +237,7 @@ export const ProtectionCivilePage: React.FC = () => {
           id: res.alerte_id,
           statut: res.statut || 'CONFIRME',
           gravite: res.gravite || 'GRAVE',
-          adresse: res.adresse || 'Tunis Centre',
+          adresse: res.adresse || getGeoConfig().default_city,
           latitude: Number(res.latitude),
           longitude: Number(res.longitude),
           nb_signalements: 1,
@@ -307,7 +308,7 @@ export const ProtectionCivilePage: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
       {/* Header bar opérationnel */}
       <Header
         wsConnected={wsConnected}
