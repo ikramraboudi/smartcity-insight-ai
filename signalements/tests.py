@@ -992,6 +992,33 @@ class IsolationForestAnomalyDetectionTest(TestCase):
         self.assertEqual(res_ack.json()['statut'], 'ACQUITTEE')
         self.assertEqual(res_ack.json()['acquittee_par_username'], 'resp_ml')
 
+    def test_simulate_anomaly_burst_endpoint_rbac_and_isolation_forest(self):
+        # 1. Citoyen bloqué (403 Forbidden) et aucune donnée créée
+        self.client.force_authenticate(user=self.citoyen)
+        res_forbidden = self.client.post('/api/signalements/anomalies/simuler/')
+        self.assertEqual(res_forbidden.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Signalement.objects.count(), 0)
+        self.assertEqual(AlerteAnomalie.objects.count(), 0)
+
+        # 2. Responsable Municipal déclenche la simulation en 1 clic
+        self.client.force_authenticate(user=self.responsable)
+        res = self.client.post('/api/signalements/anomalies/simuler/', {}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.json()
+
+        self.assertEqual(len(data['signalements_generes']), 3)
+        self.assertEqual(Signalement.objects.count(), 3)
+        self.assertIsNotNone(data['alerte'])
+        self.assertEqual(data['alerte']['statut'], AlerteAnomalie.Statut.ACTIVE)
+        self.assertGreaterEqual(data['alerte']['nb_signalements'], 3)
+        self.assertGreater(data['alerte']['score_anomalie'], 50.0)
+        self.assertTrue(
+            AlerteAnomalie.objects.filter(
+                pk=data['alerte']['id'],
+                statut=AlerteAnomalie.Statut.ACTIVE,
+            ).exists()
+        )
+
 
 
 

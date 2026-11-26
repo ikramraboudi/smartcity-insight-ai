@@ -274,6 +274,27 @@ export interface AnomalieAnalyseResponse {
   anomalies: AlerteAnomalieItem[];
 }
 
+export interface SimulatedReportSummary {
+  id: string;
+  quartier: string;
+  categorie: string;
+  gravite: GraviteSignalement;
+  latitude: number;
+  longitude: number;
+  adresse_texte: string;
+}
+
+export interface AnomalieSimulationResponse {
+  message: string;
+  modele: string;
+  quartier: string;
+  categorie: string;
+  signalements_generes: SimulatedReportSummary[];
+  nb_detectees: number;
+  alerte: AlerteAnomalieItem | null;
+  anomalies: AlerteAnomalieItem[];
+}
+
 // =============================================================================
 // Module Simulateur de Trafic Indépendant (Cap Bon - Port 8001)
 // =============================================================================

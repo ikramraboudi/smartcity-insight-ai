@@ -366,3 +366,10 @@ def scanner_toutes_anomalies(fenetre_heures: int = DEFAULT_WINDOW_HOURS) -> List
         if res is not None:
             detectees.append(res)
     return detectees
+
+
+def detect_anomalies_6h() -> List[Dict[str, Any]]:
+    """
+    Exécute le pipeline Isolation Forest sur la fenêtre active standard de 6 heures.
+    """
+    return scanner_toutes_anomalies(fenetre_heures=DEFAULT_WINDOW_HOURS)

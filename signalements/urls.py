@@ -4,6 +4,7 @@ from .views import (
     AnomalieAcquitterView,
     AnomalieAnalyseView,
     AnomalieListView,
+    AnomalieSimulerView,
     CurrentUserProfileView,
     LoginSignalementView,
     RegisterSignalementView,
@@ -19,6 +20,7 @@ urlpatterns = [
     path('auth/me/', CurrentUserProfileView.as_view(), name='signalements_me'),
     path('anomalies/', AnomalieListView.as_view(), name='signalements_anomalies'),
     path('anomalies/analyser/', AnomalieAnalyseView.as_view(), name='signalements_anomalies_analyser'),
+    path('anomalies/simuler/', AnomalieSimulerView.as_view(), name='signalements_anomalies_simuler'),
     path('anomalies/<int:pk>/acquitter/', AnomalieAcquitterView.as_view(), name='signalements_anomalies_acquitter'),
     path('', include(router.urls)),
 ]

@@ -22,6 +22,7 @@ import {
   AlerteAnomalieItem,
   AnomaliesListResponse,
   AnomalieAnalyseResponse,
+  AnomalieSimulationResponse,
   UserSession,
   TrafficSegment,
   TrafficSummary,
@@ -394,6 +395,20 @@ export async function analyserAnomalies(
   const response = await apiClient.post<AnomalieAnalyseResponse>(
     'signalements/anomalies/analyser/',
     { fenetre_heures: fenetreHeures }
+  );
+  return response.data;
+}
+
+/**
+ * Simule un pic réaliste de 3 signalements concordants puis exécute Isolation Forest (Démo)
+ */
+export async function simulateAnomalyBurst(payload?: {
+  quartier?: string;
+  categorie?: string;
+}): Promise<AnomalieSimulationResponse> {
+  const response = await apiClient.post<AnomalieSimulationResponse>(
+    'signalements/anomalies/simuler/',
+    payload ?? {}
   );
   return response.data;
 }

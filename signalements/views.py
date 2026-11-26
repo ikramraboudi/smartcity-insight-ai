@@ -12,7 +12,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
-from config.geo_config import DEFAULT_CITY, SPATIAL_CONFIG
+from config.geo_config import DEFAULT_CITY, DEFAULT_COORDS, LOCALITES_CAP_BON_NE, SPATIAL_CONFIG
 from urgences.services import distance_metres
 from .authentication import generate_jwt_token, get_user_role
 from .models import AlerteAnomalie, Signalement, is_responsable_municipal
@@ -760,6 +760,124 @@ class AnomalieAnalyseView(APIView):
                 'anomalies': AlerteAnomalieSerializer(qs, many=True).data,
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class AnomalieSimulerView(APIView):
+    """
+    Endpoint de démonstration réservé au Responsable Municipal :
+    Génère 3 signalements concordants et réalistes espacés d'environ 80 m
+    dans une même zone/catégorie puis exécute detect_anomalies_6h() (IsolationForest).
+    """
+    permission_classes = [IsResponsableMunicipal]
+
+    def post(self, request):
+        from .anomaly_detector import detect_anomalies_6h
+
+        req_quartier = (request.data.get('quartier') or '').strip() if isinstance(request.data, dict) else ''
+        req_categorie = (request.data.get('categorie') or '').strip() if isinstance(request.data, dict) else ''
+
+        localite_match = next(
+            (loc for loc in LOCALITES_CAP_BON_NE if loc['nom'].lower() == req_quartier.lower()),
+            None,
+        )
+        quartier = localite_match['nom'] if localite_match else (req_quartier or DEFAULT_CITY)
+        lat_base = float(localite_match['lat']) if localite_match else float(DEFAULT_COORDS['latitude'])
+        lng_base = float(localite_match['lng']) if localite_match else float(DEFAULT_COORDS['longitude'])
+
+        valid_categories = {c[0] for c in Signalement.Categorie.choices}
+        categorie = req_categorie if req_categorie in valid_categories else Signalement.Categorie.ECLAIRAGE
+
+        # 3 signalements réalistes espacés d'environ 80 m (> 50 m anti-doublon)
+        specs = [
+            {
+                'dlat': 0.0,
+                'dlng': 0.0,
+                'gravite': Signalement.Gravite.CRITIQUE,
+                'adresse': f"Avenue des Martyrs, {quartier}",
+                'description': (
+                    "Panne complète de l'éclairage public sur le tronçon central — "
+                    "visibilité nulle signalée par les riverains."
+                ),
+            },
+            {
+                'dlat': 0.00072,  # ~80 m au nord
+                'dlng': 0.00010,
+                'gravite': Signalement.Gravite.CRITIQUE,
+                'adresse': f"Carrefour Centre Commercial, {quartier}",
+                'description': (
+                    "Plusieurs candélabres hors service au niveau du carrefour — "
+                    "risque élevé pour la circulation nocturne."
+                ),
+            },
+            {
+                'dlat': -0.00010,
+                'dlng': 0.00090,  # ~80 m à l'est
+                'gravite': Signalement.Gravite.ELEVEE,
+                'adresse': f"Rue Principale / Secteur Urbain, {quartier}",
+                'description': (
+                    "Coupure d'éclairage persistante sur l'axe secondaire reliant les habitations."
+                ),
+            },
+        ]
+
+        client_ip = get_client_ip(request)
+        generes = []
+        for spec in specs:
+            sig = Signalement.objects.create(
+                auteur=request.user,
+                categorie=categorie,
+                gravite=spec['gravite'],
+                statut=Signalement.Statut.EN_ATTENTE,
+                description=spec['description'],
+                latitude=round(lat_base + spec['dlat'], 6),
+                longitude=round(lng_base + spec['dlng'], 6),
+                adresse_texte=spec['adresse'],
+                quartier=quartier,
+                ip_emetteur=client_ip,
+            )
+            generes.append({
+                'id': str(sig.id),
+                'quartier': sig.quartier,
+                'categorie': sig.categorie,
+                'gravite': sig.gravite,
+                'latitude': sig.latitude,
+                'longitude': sig.longitude,
+                'adresse_texte': sig.adresse_texte,
+            })
+
+        detectees = detect_anomalies_6h()
+        alerte_obj = (
+            AlerteAnomalie.objects.select_related('acquittee_par')
+            .filter(
+                quartier=quartier,
+                categorie=categorie,
+                statut=AlerteAnomalie.Statut.ACTIVE,
+            )
+            .order_by('-date_detection')
+            .first()
+        )
+        qs_anomalies = (
+            AlerteAnomalie.objects.select_related('acquittee_par')
+            .all()
+            .order_by('statut', '-date_detection')[:50]
+        )
+
+        return Response(
+            {
+                'message': (
+                    f"Simulation exécutée : 3 signalements concordants générés à {quartier} "
+                    f"et analysés par IsolationForest ({len(detectees)} anomalie(s) active(s))."
+                ),
+                'modele': 'IsolationForest (Non supervisé)',
+                'quartier': quartier,
+                'categorie': categorie,
+                'signalements_generes': generes,
+                'nb_detectees': len(detectees),
+                'alerte': AlerteAnomalieSerializer(alerte_obj).data if alerte_obj else None,
+                'anomalies': AlerteAnomalieSerializer(qs_anomalies, many=True).data,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
 

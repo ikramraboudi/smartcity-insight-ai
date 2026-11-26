@@ -40,6 +40,7 @@ import {
   getSignalementStatistiques,
   getStoredUser,
   logoutMunicipal,
+  simulateAnomalyBurst,
 } from '../services/api';
 import {
   AlerteAnomalieItem,
@@ -237,6 +238,7 @@ export const MunicipalDashboard: React.FC = () => {
     'IsolationForest'
   );
   const [isScanningAnomalies, setIsScanningAnomalies] = useState(false);
+  const [isSimulatingAnomaly, setIsSimulatingAnomaly] = useState(false);
   const [acknowledgingId, setAcknowledgingId] = useState<number | null>(null);
   const [trafficSegments, setTrafficSegments] = useState<TrafficSegment[]>([]);
   const [riskZones, setRiskZones] = useState<ZoneRiskMap[]>([]);
@@ -439,6 +441,32 @@ export const MunicipalDashboard: React.FC = () => {
       );
     } finally {
       setIsScanningAnomalies(false);
+    }
+  };
+
+  const handleSimulateAnomalyBurst = async () => {
+    setIsSimulatingAnomaly(true);
+    setActionError(null);
+    try {
+      await simulateAnomalyBurst({
+        quartier: selectedQuartier !== 'TOUS' ? selectedQuartier : undefined,
+        categorie: selectedCategorie !== 'TOUS' ? selectedCategorie : undefined,
+      });
+      const [anomaliesRes, statsRes, reportsRes] = await Promise.all([
+        getAnomalies('ACTIVE'),
+        getSignalementStatistiques(activeFilters),
+        getSignalements(activeFilters),
+      ]);
+      setAnomalies(anomaliesRes.anomalies || []);
+      setGlobalStats(statsRes);
+      setSignalements(reportsRes);
+    } catch (err: any) {
+      setActionError(
+        err?.response?.data?.detail ||
+          "Erreur lors de la simulation du pic d'anomalie IA."
+      );
+    } finally {
+      setIsSimulatingAnomaly(false);
     }
   };
 
@@ -977,36 +1005,85 @@ export const MunicipalDashboard: React.FC = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="municipal-glass-btn"
-            onClick={() => void handleScanAnomalies()}
-            disabled={isScanningAnomalies}
+          <div
             style={{
-              display: 'inline-flex',
+              display: 'flex',
+              flexWrap: 'wrap',
               alignItems: 'center',
-              gap: 8,
-              padding: '8px 14px',
-              borderRadius: 8,
-              fontSize: 12.5,
-              fontWeight: 600,
-              background: 'rgba(56, 189, 248, 0.14)',
-              border: '1px solid rgba(56, 189, 248, 0.36)',
-              color: '#bae6fd',
-              cursor: isScanningAnomalies ? 'not-allowed' : 'pointer',
-              opacity: isScanningAnomalies ? 0.55 : 1,
+              gap: 10,
             }}
           >
-            <RefreshCw
-              size={14}
-              className={isScanningAnomalies ? 'animate-spin' : ''}
-            />
-            <span>
-              {isScanningAnomalies
-                ? 'Analyse ML en cours...'
-                : 'Lancer scan IA (6h)'}
-            </span>
-          </button>
+            <button
+              type="button"
+              className="municipal-glass-btn"
+              onClick={() => void handleSimulateAnomalyBurst()}
+              disabled={isSimulatingAnomaly || isScanningAnomalies}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '8px 13px',
+                borderRadius: 8,
+                fontSize: 12.5,
+                fontWeight: 600,
+                background: 'rgba(245, 158, 11, 0.14)',
+                border: '1px solid rgba(245, 158, 11, 0.36)',
+                color: '#fde68a',
+                cursor:
+                  isSimulatingAnomaly || isScanningAnomalies
+                    ? 'not-allowed'
+                    : 'pointer',
+                opacity:
+                  isSimulatingAnomaly || isScanningAnomalies ? 0.55 : 1,
+              }}
+            >
+              {isSimulatingAnomaly ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <Zap size={14} />
+              )}
+              <span>
+                {isSimulatingAnomaly
+                  ? 'Simulation en cours...'
+                  : 'Simuler pic anormal'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="municipal-glass-btn"
+              onClick={() => void handleScanAnomalies()}
+              disabled={isScanningAnomalies || isSimulatingAnomaly}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 14px',
+                borderRadius: 8,
+                fontSize: 12.5,
+                fontWeight: 600,
+                background: 'rgba(56, 189, 248, 0.14)',
+                border: '1px solid rgba(56, 189, 248, 0.36)',
+                color: '#bae6fd',
+                cursor:
+                  isScanningAnomalies || isSimulatingAnomaly
+                    ? 'not-allowed'
+                    : 'pointer',
+                opacity:
+                  isScanningAnomalies || isSimulatingAnomaly ? 0.55 : 1,
+              }}
+            >
+              <RefreshCw
+                size={14}
+                className={isScanningAnomalies ? 'animate-spin' : ''}
+              />
+              <span>
+                {isScanningAnomalies
+                  ? 'Analyse ML en cours...'
+                  : 'Lancer scan IA (6h)'}
+              </span>
+            </button>
+          </div>
         </div>
 
         {anomalies.length > 0 && (
