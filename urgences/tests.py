@@ -1,3 +1,5 @@
+import os
+from unittest.mock import patch
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -208,15 +210,19 @@ class UrgencesAssistantLLMTestCase(TestCase):
         self.assertIn("Kélibia", ctx["region"])
 
     def test_assistant_repond_avec_donnees_reelles_sans_halluciner(self):
-        res_zones = interroger_assistant_llm("Quelles sont les zones rouges prioritaires ?")
-        self.assertIn("reponse", res_zones)
-        self.assertIsInstance(res_zones["reponse"], str)
-        self.assertIn("score", res_zones["reponse"].lower())
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "", "LLM_API_KEY": "", "OPENAI_API_KEY": ""}):
+            res_zones = interroger_assistant_llm("Quelles sont les zones rouges prioritaires ?")
+            self.assertIn("reponse", res_zones)
+            self.assertIsInstance(res_zones["reponse"], str)
+            self.assertIn("score", res_zones["reponse"].lower())
 
-        res_casernes = interroger_assistant_llm("Quelles casernes sont disponibles ?")
-        self.assertIn("reponse", res_casernes)
-        self.assertIn("Kélibia", res_casernes["reponse"])
-        self.assertIn("El Haouaria", res_casernes["reponse"])
+            res_casernes = interroger_assistant_llm("Quelles casernes sont disponibles ?")
+            self.assertIn("reponse", res_casernes)
+            self.assertIn("Protection Civile Kélibia", res_casernes["reponse"])
+            self.assertIn("Protection civile El Haouaria", res_casernes["reponse"])
+            self.assertIn("72 296 366", res_casernes["reponse"])
+            self.assertIn("72 269 575", res_casernes["reponse"])
+            self.assertIn("sans caserne dédiée", res_casernes["reponse"])
 
 
 class UrgencesSimulationApiTestCase(TestCase):
@@ -226,6 +232,19 @@ class UrgencesSimulationApiTestCase(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+
+    def test_endpoint_casernes_cap_bon(self):
+        res = self.client.get('/api/urgences/casernes/')
+        self.assertEqual(res.status_code, 200)
+        casernes = res.json()
+        self.assertEqual(len(casernes), 2)
+        ids = [c["id"] for c in casernes]
+        self.assertEqual(ids, ["caserne-kelibia", "caserne-el-haouaria"])
+        self.assertIn("72 296 366", casernes[0]["telephone"])
+        self.assertIn("8090 Kélibia", casernes[0]["adresse"])
+        self.assertEqual(casernes[0]["communes_desservies"], ["Kélibia", "Azmour", "Hammam Ghezaz"])
+        self.assertIn("72 269 575", casernes[1]["telephone"])
+        self.assertIn("MC 26 et MC 27", casernes[1]["adresse"])
 
     def test_endpoint_geo_config(self):
         res = self.client.get('/api/urgences/geo-config/')

@@ -73,7 +73,7 @@ Ouvrez ensuite votre navigateur sur **http://localhost:5173**.
 |---|---|---|---|
 | `GET` | `/api/urgences/alertes/` | Liste des alertes d'accidents récentes | Étudiant 3 |
 | `GET` | `/api/urgences/geo-config/` | Configuration géographique centralisée du Nord-Est Cap Bon (centre, zoom, limites, localités) | Architecture |
-| `GET` | `/api/urgences/casernes/` | Liste des casernes de pompiers du Nord-Est Cap Bon (Kélibia, Hammam El Ghezaz, El Haouaria, Azmour / Menzel Horr) | Étudiant 3 |
+| `GET` | `/api/urgences/casernes/` | Liste des casernes de pompiers du Nord-Est Cap Bon (Protection Civile Kélibia — desservant Kélibia, Azmour et Hammam Ghezaz — et Protection civile El Haouaria) | Étudiant 3 |
 | `POST` | `/api/urgences/simuler-accident/` | Déclenche un accident test et diffuse l'alerte en direct | Étudiant 3 |
 | `POST` | `/api/urgences/recevoir-accident/` | **Passerelle d'intégration :** Reçoit les signalements citoyens | Étud 2 ➔ Étud 3 |
 | `POST` | `/api/urgences/alerte/{id}/statut/` | Met à jour le statut (`PRISE_EN_CHARGE`, `EN_INTERVENTION`, `CLOTURE`) | Étudiant 3 |

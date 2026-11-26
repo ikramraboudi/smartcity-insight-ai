@@ -77,56 +77,42 @@ CIRCONSCRIPTIONS_PRESETS: List[str] = [
     f"Commune {d['nom']} ({d['code_postal']})" for d in LOCALITES_CAP_BON_NE
 ]
 
-# Casernes et unités de la Protection Civile (Kélibia, Hammam El Ghezaz, El Haouaria & environs)
+# Casernes et unités de la Protection Civile (Nord-Est du Cap Bon)
+# Azmour, Hammam Ghezaz et Menzel Horr ne disposent pas de caserne propre :
+# Kélibia, Azmour et Hammam Ghezaz sont directement desservies par la caserne de Kélibia.
 CASERNES_CAP_BON: List[Dict[str, Any]] = [
     {
         "id": "caserne-kelibia",
-        "nom": "Caserne Principale Protection Civile - Kélibia",
-        "adresse": "Avenue des Martyrs / Zone du Port, Kélibia",
+        "nom": "Protection Civile Kélibia",
+        "adresse": "Avenue des Martyrs / Avenue de l'Environnement, 8090 Kélibia",
         "delegation": "Kélibia",
+        "communes_desservies": ["Kélibia", "Azmour", "Hammam Ghezaz"],
         "latitude": 36.8475,
         "longitude": 11.0939,
-        "telephone": "198 / +216 72 296 198",
+        "telephone": "198 / 72 296 366",
         "ambulances_disponibles": 3,
         "camions_disponibles": 2,
         "statut": "OPERATIONNELLE",
     },
     {
-        "id": "caserne-hammam-ghezeze",
-        "nom": "Poste Avancé Protection Civile - Hammam El Ghezaz",
-        "adresse": "Route Côtière C27, Hammam El Ghezaz",
-        "delegation": "Hammam El Ghezaz",
-        "latitude": 36.8906,
-        "longitude": 11.1197,
-        "telephone": "198 / +216 72 297 198",
-        "ambulances_disponibles": 2,
-        "camions_disponibles": 1,
-        "statut": "OPERATIONNELLE",
-    },
-    {
         "id": "caserne-el-haouaria",
-        "nom": "Unité Protection Civile - El Haouaria",
-        "adresse": "Avenue de l'Environnement / Entrée Sud, El Haouaria",
+        "nom": "Protection civile El Haouaria",
+        "adresse": "Croisement des routes MC 26 et MC 27, 8045 El Haouaria",
         "delegation": "El Haouaria",
+        "communes_desservies": ["El Haouaria"],
         "latitude": 37.0500,
         "longitude": 11.0144,
-        "telephone": "198 / +216 72 297 598",
+        "telephone": "198 / 72 269 575",
         "ambulances_disponibles": 2,
         "camions_disponibles": 2,
         "statut": "OPERATIONNELLE",
     },
-    {
-        "id": "caserne-azmour",
-        "nom": "Poste de Secours - Azmour / Menzel Horr",
-        "adresse": "Carrefour Azmour, Route de Kélibia Ouest",
-        "delegation": "Azmour",
-        "latitude": 36.8260,
-        "longitude": 11.0180,
-        "telephone": "198 / +216 72 295 198",
-        "ambulances_disponibles": 2,
-        "camions_disponibles": 1,
-        "statut": "OPERATIONNELLE",
-    },
+]
+
+LOCALITES_SANS_CASERNE: List[str] = [
+    "Azmour (desservie par Protection Civile Kélibia)",
+    "Hammam Ghezaz (desservie par Protection Civile Kélibia)",
+    "Menzel Horr (sans caserne dédiée)",
 ]
 
 # Secteurs stratégiques Risk Map du Nord-Est Cap Bon (alignés avec ml_congestion)

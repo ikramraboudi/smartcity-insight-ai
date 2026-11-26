@@ -16,7 +16,12 @@ import requests
 from django.utils import timezone
 from datetime import timedelta
 
-from config.geo_config import CASERNES_CAP_BON, REGION_NAME, REGION_SHORT_NAME
+from config.geo_config import (
+    CASERNES_CAP_BON,
+    LOCALITES_SANS_CASERNE,
+    REGION_NAME,
+    REGION_SHORT_NAME,
+)
 from .models import AlerteAccident, SignalementAccident, JournalAuditIntervention
 from .ml_models import get_toutes_les_zones_risk_map
 
@@ -28,6 +33,8 @@ CASERNES_INFO = [
         "nom": c["nom"],
         "adresse": c["adresse"],
         "delegation": c.get("delegation", ""),
+        "communes_desservies": c.get("communes_desservies", []),
+        "telephone": c.get("telephone", "198"),
         "ambulances": c["ambulances_disponibles"],
         "camions": c["camions_disponibles"],
     }
@@ -102,6 +109,7 @@ def extraire_contexte_terrain_reel() -> dict:
             ],
         },
         "casernes_operationnelles": CASERNES_INFO,
+        "localites_sans_caserne_propre": LOCALITES_SANS_CASERNE,
     }
 
 
@@ -136,7 +144,7 @@ def generer_reponse_deterministe_ancrage(question: str, contexte: dict) -> str:
         for z in rouges:
             rep += f"1. **{z['nom']}** — Score de risque : **{z['score']}**\n"
             rep += f"   - *Facteurs explicatifs identifiés :* {'; '.join(z['facteurs'])}\n"
-        rep += "\n**Recommandation d'engagement opérationnel :** Mobiliser en priorité les unités de la *Caserne Principale de Kélibia*, de *Hammam El Ghezaz* et d'*El Haouaria* pour couvrir les axes critiques."
+        rep += "\n**Recommandation d'engagement opérationnel :** Mobiliser en priorité les unités de *Protection Civile Kélibia* (desservant Kélibia, Azmour et Hammam Ghezaz) et de *Protection civile El Haouaria* pour couvrir les axes critiques."
         return rep
 
     # 2. Questions sur le pourquoi du risque d'une zone
@@ -184,7 +192,15 @@ def generer_reponse_deterministe_ancrage(question: str, contexte: dict) -> str:
     if any(k in q_norm for k in ["caserne", "moyen", "ambulance", "camion", "pompier", "secour"]):
         rep = f"### 🚒 Disponibilité des Casernes de Protection Civile ({REGION_NAME})\n\n"
         for c in contexte["casernes_operationnelles"]:
-            rep += f"- **{c['nom']}** ({c['adresse']}) : **{c['ambulances']}** ambulances, **{c['camions']}** camions d'intervention disponibles.\n"
+            communes = ", ".join(c.get("communes_desservies", []))
+            desservies = f" — *Communes desservies : {communes}*" if communes else ""
+            rep += (
+                f"- **{c['nom']}** ({c['adresse']}, Tél. {c.get('telephone', '198')}) : "
+                f"**{c['ambulances']}** ambulances, **{c['camions']}** camions d'intervention disponibles.{desservies}\n"
+            )
+        sans_caserne = contexte.get("localites_sans_caserne_propre", [])
+        if sans_caserne:
+            rep += "\n**Localités sans caserne dédiée :** " + " ; ".join(sans_caserne) + ".\n"
         rep += "\n*Numéro d'urgence opérationnel : 198 (Poste de commandement Kélibia / Nord-Est Cap Bon).*"
         return rep
 
@@ -223,17 +239,20 @@ def interroger_assistant_llm(question: str) -> dict:
             f"CONTEXTE TEMPS RÉEL :\n{json.dumps(contexte, ensure_ascii=False, indent=2)}"
         )
 
-        gemini_key = os.environ.get("GEMINI_API_KEY") or (api_key if api_key.startswith("AIza") else None)
+        gemini_key = os.environ.get("GEMINI_API_KEY") or (
+            api_key if api_key.startswith(("AIza", "AQ.")) else None
+        )
         if gemini_key:
+            gemini_model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={gemini_key}"
                 payload = {
                     "contents": [
                         {"role": "user", "parts": [{"text": f"{prompt_systeme}\n\nQuestion de l'opérateur de la Protection Civile :\n{question}"}]}
                     ],
                     "generationConfig": {"temperature": 0.1, "maxOutputTokens": 800}
                 }
-                res = requests.post(url, json=payload, timeout=5)
+                res = requests.post(url, json=payload, timeout=15)
                 if res.status_code == 200:
                     data = res.json()
                     candidates = data.get("candidates", [])
@@ -241,7 +260,9 @@ def interroger_assistant_llm(question: str) -> dict:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         if parts:
                             reponse_texte = parts[0].get("text", "")
-                            moteur_utilise = "Gemini 1.5 Flash (RAG Ancré)"
+                            moteur_utilise = f"{gemini_model} (RAG Ancré)"
+                else:
+                    logger.warning(f"Gemini API HTTP {res.status_code}: {res.text[:200]}")
             except Exception as e:
                 logger.warning(f"Échec appel Gemini API: {e}")
 
