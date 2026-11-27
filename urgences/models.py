@@ -123,3 +123,29 @@ class Chantier(models.Model):
 
     def __str__(self):
         return f"🚧 {self.titre} — {self.rue_nom} ({self.statut})"
+
+
+class TronconRoutier(models.Model):
+    """
+    Corridor / tronçon routier du Nord-Est Cap Bon stocké en base spatiale PostGIS
+    (table `troncon_routier` avec colonne `geom geometry(LineString, 4326)` et index GIST).
+    """
+    street_id = models.CharField(max_length=80, unique=True, db_index=True)
+    street_name = models.CharField(max_length=200)
+    zone = models.CharField(max_length=60, db_index=True)
+    road_type = models.CharField(max_length=50, default='ARTERE_PRINCIPALE')
+    base_speed_kmh = models.FloatField(default=50.0)
+    length_km = models.FloatField(default=3.0)
+    proximity_sensitive = models.BooleanField(default=False)
+    alternatives = models.JSONField(default=list, blank=True)
+    coordinates = models.JSONField(default=list, blank=True)
+    geom_wkt = models.TextField(blank=True, default='')
+
+    class Meta:
+        db_table = 'troncon_routier'
+        ordering = ['street_id']
+        verbose_name = 'Tronçon Routier (PostGIS)'
+        verbose_name_plural = 'Tronçons Routiers (PostGIS)'
+
+    def __str__(self):
+        return f"{self.street_name} ({self.zone})"

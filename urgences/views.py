@@ -3,6 +3,7 @@ import threading
 import json
 import urllib.request
 from django.core.cache import cache
+from django.db import connection
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -14,7 +15,7 @@ from config.geo_config import (
     POINTS_SIMULATION_CAP_BON,
     get_public_geo_config,
 )
-from .models import SignalementAccident, AlerteAccident, Chantier, JournalAudit, JournalAuditIntervention
+from .models import SignalementAccident, AlerteAccident, Chantier, TronconRoutier, JournalAudit, JournalAuditIntervention
 from .services import (
     traiter_signalement,
     diffuser_alerte_temps_reel,
@@ -369,6 +370,7 @@ def chantiers_list_create(request):
         declare_par=request.user if request.user.is_authenticated else None,
     )
     cache.delete('chantiers_all')
+    _sync_point_geom('urgences_chantier', chantier.id, chantier.latitude, chantier.longitude)
     return Response(_serialize_chantier(chantier), status=201)
 
 
@@ -404,6 +406,111 @@ def chantier_detail(request, chantier_id):
 
     chantier.save()
     cache.delete('chantiers_all')
+    _sync_point_geom('urgences_chantier', chantier.id, chantier.latitude, chantier.longitude)
     return Response(_serialize_chantier(chantier))
+
+
+def _sync_point_geom(table_name: str, row_id: int, lat: float, lng: float) -> None:
+    """Met à jour la colonne PostGIS `geom` (Point SRID 4326) si PostgreSQL est actif."""
+    if connection.vendor != 'postgresql':
+        return
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"UPDATE {table_name} SET geom = ST_SetSRID(ST_MakePoint(%s, %s), 4326) WHERE id = %s;",
+                [lng, lat, row_id],
+            )
+    except Exception:
+        pass
+
+
+@api_view(['GET'])
+def lister_troncons(request):
+    """
+    GET /api/troncons/ : Retourne les tronçons routiers (table PostGIS `troncon_routier`)
+    avec leurs géométries LineString (GeoJSON + coordonnées) et attributs.
+    """
+    cached = cache.get('troncons_routiers_all')
+    if cached is not None:
+        return Response(cached)
+
+    troncons = TronconRoutier.objects.all()
+    data = []
+    for t in troncons:
+        geojson_coords = [[lng, lat] for lat, lng in (t.coordinates or [])]
+        data.append({
+            "id": t.id,
+            "street_id": t.street_id,
+            "street_name": t.street_name,
+            "zone": t.zone,
+            "road_type": t.road_type,
+            "base_speed_kmh": t.base_speed_kmh,
+            "length_km": t.length_km,
+            "proximity_sensitive": t.proximity_sensitive,
+            "alternatives": t.alternatives,
+            "coordinates": t.coordinates,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": geojson_coords,
+            },
+        })
+    cache.set('troncons_routiers_all', data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+def troncons_proches(request):
+    """
+    GET /api/troncons/proches/?lat=36.8475&lng=11.0939&rayon_m=2500
+    Utilise l'index spatial GIST + ST_DWithin / ST_Distance de PostGIS sur `troncon_routier.geom`.
+    """
+    try:
+        lat = float(request.GET.get('lat', DEFAULT_COORDS['latitude']))
+        lng = float(request.GET.get('lng', DEFAULT_COORDS['longitude']))
+        rayon_m = float(request.GET.get('rayon_m', 2500))
+    except (TypeError, ValueError):
+        return Response({"detail": "Paramètres lat/lng/rayon_m invalides."}, status=400)
+
+    if connection.vendor == 'postgresql':
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT street_id, street_name, zone, road_type, base_speed_kmh, length_km,
+                           ROUND(ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography)::numeric, 1) AS distance_m
+                    FROM troncon_routier
+                    WHERE geom IS NOT NULL
+                      AND ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, %s)
+                    ORDER BY distance_m ASC;
+                    """,
+                    [lng, lat, lng, lat, rayon_m],
+                )
+                cols = [col[0] for col in cursor.description]
+                rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+                for r in rows:
+                    r["distance_m"] = float(r["distance_m"])
+                return Response({"engine": "PostGIS (GIST + ST_DWithin)", "count": len(rows), "troncons": rows})
+        except Exception:
+            pass
+
+    # Fallback SQLite
+    from .services import distance_metres
+    rows = []
+    for t in TronconRoutier.objects.all():
+        if not t.coordinates:
+            continue
+        min_d = min(distance_metres(lat, lng, pt[0], pt[1]) for pt in t.coordinates)
+        if min_d <= rayon_m:
+            rows.append({
+                "street_id": t.street_id,
+                "street_name": t.street_name,
+                "zone": t.zone,
+                "road_type": t.road_type,
+                "base_speed_kmh": t.base_speed_kmh,
+                "length_km": t.length_km,
+                "distance_m": round(min_d, 1),
+            })
+    rows.sort(key=lambda x: x["distance_m"])
+    return Response({"engine": "Fallback Python", "count": len(rows), "troncons": rows})
 
 

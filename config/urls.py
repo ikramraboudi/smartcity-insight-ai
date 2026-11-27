@@ -16,6 +16,8 @@ from urgences.views import (
     endpoint_simulation_urgences,
     chantiers_list_create,
     chantier_detail,
+    lister_troncons,
+    troncons_proches,
 )
 from ml_congestion.api_views import predict_congestion_api, get_model_metrics_api
 
@@ -41,6 +43,10 @@ urlpatterns = [
     # Gestion des Chantiers (Responsable Municipal -> Carte Protection Civile)
     path('api/chantiers/', chantiers_list_create, name='chantiers_list_create'),
     path('api/chantiers/<int:chantier_id>/', chantier_detail, name='chantier_detail'),
+
+    # Base Spatiale PostGIS — Tronçons Routiers
+    path('api/troncons/', lister_troncons, name='lister_troncons'),
+    path('api/troncons/proches/', troncons_proches, name='troncons_proches'),
 
     # Module D — Prédiction de Congestion (Machine Learning)
     path('api/ml/congestion/predict/', predict_congestion_api, name='predict_congestion_ml'),
