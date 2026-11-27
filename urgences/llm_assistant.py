@@ -22,8 +22,8 @@ from config.geo_config import (
     REGION_NAME,
     REGION_SHORT_NAME,
 )
-from .models import AlerteAccident, SignalementAccident, JournalAuditIntervention
-from .ml_models import get_toutes_les_zones_risk_map
+from .models import AlerteAccident, Chantier, SignalementAccident, JournalAuditIntervention
+from .ml_models import _fetch_simulator_segments, get_toutes_les_zones_risk_map
 
 logger = logging.getLogger(__name__)
 
@@ -83,11 +83,44 @@ def extraire_contexte_terrain_reel() -> dict:
     zones_oranges = [z for z in zones_risk if z["niveau_couleur"] == "orange"]
     zones_vertes = [z for z in zones_risk if z["niveau_couleur"] == "vert"]
 
+    # 5. Chantiers actifs en base PostgreSQL
+    chantiers_actifs = [
+        {
+            "titre": ch.titre,
+            "rue": ch.rue_nom,
+            "priorite": ch.priorite,
+            "voies_bloquees": ch.voies_bloquees,
+        }
+        for ch in Chantier.objects.filter(statut='EN_COURS')[:15]
+    ]
+
+    # 6. État en direct du Simulateur de Trafic (segments rouges / congestionnés)
+    sim_segments = _fetch_simulator_segments()
+    segments_rouges = [
+        {
+            "nom": s.get("name"),
+            "zone": s.get("zone"),
+            "niveau": s.get("congestion_level"),
+            "indice": s.get("congestion_index"),
+            "vitesse_kmh": s.get("current_speed_kmh"),
+            "incident": s.get("incident_description"),
+        }
+        for s in sim_segments
+        if s.get("congestion_level") in ("HEAVY", "BLOCKED") or float(s.get("congestion_index", 0)) >= 3.2
+    ]
+
     return {
         "region": REGION_NAME,
         "horodatage": now.strftime("%Y-%m-%d %H:%M:%S UTC"),
         "alertes_actives": alertes_liste,
         "nb_alertes_actives": len(alertes_liste),
+        "chantiers_actifs": chantiers_actifs,
+        "simulateur_trafic_direct": {
+            "connecte": len(sim_segments) > 0,
+            "nb_segments_total": len(sim_segments),
+            "nb_segments_rouges_ou_bloques": len(segments_rouges),
+            "segments_rouges_ou_bloques": segments_rouges[:15],
+        },
         "statistiques_24h": {
             "total_alertes": total_24h,
             "alertes_cloturees": total_cloturees_24h,

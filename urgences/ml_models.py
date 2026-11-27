@@ -8,9 +8,11 @@ Combine :
 
 from datetime import timedelta
 import math
+import requests
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+from django.core.cache import cache
 from django.utils import timezone
 
 from config.geo_config import SECTEURS_CAP_BON
@@ -47,8 +49,63 @@ def entrainer_modele_risk_map():
     return _risk_model_instance
 
 
-def extraire_trafic_secteur(secteur_id: str, street_id: str = "", default_index: float = 2.0) -> float:
-    """Récupère l'indice de trafic via ml_congestion (correspondance exacte street_id ou secteur_id)."""
+def _fetch_simulator_segments() -> list:
+    """Récupère les tronçons en direct du simulateur de trafic (port 8001) avec cache 5s."""
+    cached = cache.get("sim_live_segments")
+    if cached is not None:
+        return cached
+    try:
+        resp = requests.get("http://127.0.0.1:8001/api/traffic/segments", timeout=0.8)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list):
+                cache.set("sim_live_segments", data, timeout=5)
+                return data
+    except Exception:
+        pass
+    return []
+
+
+def extraire_trafic_secteur(
+    secteur_id: str,
+    street_id: str = "",
+    default_index: float = 2.0,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> float:
+    """
+    Récupère l'indice de trafic en direct depuis le simulateur (port 8001) en priorité,
+    avec fallback sur ml_congestion.
+    """
+    # 1. Priorité au simulateur de trafic en direct (synchronisé avec la carte)
+    sim_segments = _fetch_simulator_segments()
+    if sim_segments:
+        # Correspondance par street_id exact ou nom/zone
+        matched_indices = []
+        sec_tokens = [t for t in secteur_id.lower().split("_") if len(t) > 2]
+        for seg in sim_segments:
+            seg_id = str(seg.get("id", "")).lower()
+            seg_name = str(seg.get("name", "")).lower()
+            seg_zone = str(seg.get("zone", "")).lower()
+            if (street_id and seg_id == street_id.lower()) or any(
+                tok in seg_id or tok in seg_name or tok in seg_zone for tok in sec_tokens
+            ):
+                matched_indices.append(float(seg.get("congestion_index", default_index)))
+            elif lat is not None and lng is not None and seg.get("coordinates"):
+                # Correspondance par proximité géographique (<= 2.5 km)
+                coords = seg["coordinates"]
+                if any(distance_metres(lat, lng, pt[0], pt[1]) <= 2500.0 for pt in coords):
+                    matched_indices.append(float(seg.get("congestion_index", default_index)))
+
+        if matched_indices:
+            # Prend le maximum observé dans le secteur pour refléter les points rouges
+            return float(max(matched_indices))
+
+        all_indices = [float(s.get("congestion_index", default_index)) for s in sim_segments]
+        if all_indices:
+            return float(np.mean(all_indices))
+
+    # 2. Fallback sur le modèle ML ml_congestion si le simulateur est hors ligne
     try:
         from ml_congestion.predictor import predict_congestion_by_street
         now_iso = timezone.now().isoformat()
@@ -140,11 +197,13 @@ def evaluer_secteur_region(secteur: dict, meteo_pluie: int = 0, presence_travaux
     nb_chantiers = chantiers_info["count"]
     travaux_effectifs = 1 if (presence_travaux == 1 or nb_chantiers > 0) else 0
 
-    # 3. Trafic connecté
+    # 3. Trafic connecté (simulateur en direct + fallback ML)
     trafic_idx = extraire_trafic_secteur(
         secteur["id"],
         street_id=secteur.get("street_id", ""),
         default_index=2.2,
+        lat=lat,
+        lng=lng,
     )
 
     # 4. Formule composite calibrée (0 à 100%)
@@ -165,7 +224,15 @@ def evaluer_secteur_region(secteur: dict, meteo_pluie: int = 0, presence_travaux
     else:
         bonus_travaux = 0.0
 
-    score_total = round(min(100.0, max(5.0, score_accidents + score_geometrie + score_trafic + bonus_meteo + bonus_travaux)), 1)
+    # Facteur aggravant trafic critique en direct (saturation / paralysie simulateur)
+    if trafic_idx >= 4.5:
+        bonus_saturation = 18.0
+    elif trafic_idx >= 3.8:
+        bonus_saturation = 10.0
+    else:
+        bonus_saturation = 0.0
+
+    score_total = round(min(100.0, max(5.0, score_accidents + score_geometrie + score_trafic + bonus_meteo + bonus_travaux + bonus_saturation)), 1)
 
     if score_total >= 70.0:
         couleur = "rouge"

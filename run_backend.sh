@@ -4,6 +4,13 @@ echo " SmartCity Insight AI - Backend Django Channels & REST API (8000)"
 echo "====================================================================="
 cd "$(dirname "$0")"
 
+# Load local .env if present (gitignored, keeps API keys out of git)
+if [ -f ".env" ]; then
+    set -a
+    source .env
+    set +a
+fi
+
 # Ensure PostgreSQL & Redis are running
 ./run_db.sh || exit 1
 

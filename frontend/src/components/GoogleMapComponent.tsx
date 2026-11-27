@@ -339,14 +339,19 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   }, [trafficLayerActive]);
 
   // 3bis. Affichage de la couche Risk Map (Secteurs colorés vert/orange/rouge & facteurs)
-  // Se rafraîchit automatiquement dès que les chantiers changent (et toutes les 30s)
+  // Se rafraîchit dès que les chantiers changent et toutes les 10s (suivi simulateur de trafic)
   useEffect(() => {
     let isMounted = true;
-    fetchZonesRiskMap().then((data) => {
-      if (isMounted) setZonesRisk(data);
-    });
+    const refreshRisk = () => {
+      fetchZonesRiskMap().then((data) => {
+        if (isMounted) setZonesRisk(data);
+      });
+    };
+    refreshRisk();
+    const intervalId = window.setInterval(refreshRisk, 10000);
     return () => {
       isMounted = false;
+      window.clearInterval(intervalId);
     };
   }, [chantiers]);
 
