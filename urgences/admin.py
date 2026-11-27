@@ -1,3 +1,6 @@
 from django.contrib import admin
+from .models import AlerteAccident, Chantier, SignalementAccident
 
-# Register your models here.
+admin.site.register(AlerteAccident)
+admin.site.register(SignalementAccident)
+admin.site.register(Chantier)

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import L from 'leaflet';
-import type { Alerte, Caserne, RouteInfo, ZoneRiskMap } from '../types';
+import type { Alerte, Caserne, Chantier, RouteInfo, ZoneRiskMap } from '../types';
 import {
   addStandardBasemapLayer,
   FALLBACK_CASERNES_CAP_BON,
@@ -17,6 +17,7 @@ import {
 interface GoogleMapComponentProps {
   casernes: Caserne[];
   alertes: Alerte[];
+  chantiers?: Chantier[];
   selectedAlerte: Alerte | null;
   selectedCaserne: Caserne | null;
   trafficLayerActive: boolean;
@@ -27,6 +28,7 @@ interface GoogleMapComponentProps {
 export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   casernes,
   alertes,
+  chantiers = [],
   selectedAlerte,
   selectedCaserne,
   trafficLayerActive,
@@ -236,7 +238,37 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       m.on('click', () => onSelectAlerte(a));
       m.addTo(leafletMarkersRef.current!);
     });
-  }, [casernes, alertes, onSelectAlerte]);
+
+    // Marqueurs Chantiers de voirie actifs (🚧) déclarés par le Responsable Municipal
+    const chantiersActifs = chantiers.filter((c) => c.statut !== 'TERMINE');
+    chantiersActifs.forEach((ch) => {
+      const chantierIcon = L.divIcon({
+        className: 'custom-chantier-marker',
+        html: '<div style="background:#f59e0b;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 6px rgba(0,0,0,0.45);">🚧</div>',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+
+      const m = L.marker([ch.latitude, ch.longitude], { icon: chantierIcon });
+      m.bindPopup(`
+        <div style="color: #0f172a; font-family: sans-serif; font-size: 12px; min-width: 200px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <strong style="color: #d97706; font-size: 13px;">🚧 ${ch.titre}</strong>
+            <span style="background: #fef3c7; color: #b45309; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">
+              ${ch.priorite}
+            </span>
+          </div>
+          <div style="color: #334155;">📍 ${ch.rue_nom}</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+            🚧 ${ch.voies_bloquees} voie(s) bloquée(s) • Statut : <strong>${ch.statut}</strong>
+          </div>
+          ${ch.date_debut || ch.date_fin ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">📅 ${ch.date_debut || '?'} → ${ch.date_fin || '?'}</div>` : ''}
+          ${ch.description ? `<div style="font-size: 11px; color: #475569; margin-top: 4px;">${ch.description}</div>` : ''}
+        </div>
+      `);
+      m.addTo(leafletMarkersRef.current!);
+    });
+  }, [casernes, alertes, chantiers, onSelectAlerte]);
 
   // 3. Affichage de la couche de trafic simulé en temps réel (Cap Bon)
   useEffect(() => {
@@ -307,6 +339,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   }, [trafficLayerActive]);
 
   // 3bis. Affichage de la couche Risk Map (Secteurs colorés vert/orange/rouge & facteurs)
+  // Se rafraîchit automatiquement dès que les chantiers changent (et toutes les 30s)
   useEffect(() => {
     let isMounted = true;
     fetchZonesRiskMap().then((data) => {
@@ -315,7 +348,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [chantiers]);
 
   useEffect(() => {
     if (!leafletMapRef.current) return;

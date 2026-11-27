@@ -27,6 +27,9 @@ import {
   TrafficSegment,
   TrafficSummary,
   RouteDelayResponse,
+  Chantier,
+  CreateChantierPayload,
+  StatutChantier,
 } from '../types';
 
 
@@ -548,6 +551,39 @@ export async function predictRiskMap(params: {
 }): Promise<RiskMapResult> {
   const res = await apiClient.post('urgences/risk-map/', params);
   return res.data.donnees_zone;
+}
+
+// =============================================================================
+// Gestion des Chantiers (Responsable Municipal -> Carte Protection Civile)
+// =============================================================================
+
+export async function fetchChantiers(statut?: StatutChantier): Promise<Chantier[]> {
+  try {
+    const res = await apiClient.get<Chantier[]>('chantiers/', {
+      params: statut ? { statut } : undefined,
+    });
+    return res.data;
+  } catch (err) {
+    console.warn('Impossible de charger les chantiers:', err);
+    return [];
+  }
+}
+
+export async function createChantier(payload: CreateChantierPayload): Promise<Chantier> {
+  const res = await apiClient.post<Chantier>('chantiers/', payload);
+  return res.data;
+}
+
+export async function updateChantierStatut(
+  chantierId: number,
+  statut: StatutChantier
+): Promise<Chantier> {
+  const res = await apiClient.patch<Chantier>(`chantiers/${chantierId}/`, { statut });
+  return res.data;
+}
+
+export async function deleteChantier(chantierId: number): Promise<void> {
+  await apiClient.delete(`chantiers/${chantierId}/`);
 }
 
 

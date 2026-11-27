@@ -165,6 +165,40 @@ export interface CreateSignalementPayload {
   photo?: File | null;
 }
 
+export type PrioriteChantier = 'FAIBLE' | 'MOYENNE' | 'ELEVEE' | 'CRITIQUE';
+export type StatutChantier = 'PLANIFIE' | 'EN_COURS' | 'TERMINE';
+
+export interface Chantier {
+  id: number;
+  titre: string;
+  rue_nom: string;
+  street_id?: string;
+  description: string;
+  latitude: number;
+  longitude: number;
+  priorite: PrioriteChantier;
+  voies_bloquees: number;
+  statut: StatutChantier;
+  date_debut?: string | null;
+  date_fin?: string | null;
+  declare_par?: string | null;
+  date_creation: string;
+}
+
+export interface CreateChantierPayload {
+  titre: string;
+  rue_nom: string;
+  street_id?: string;
+  description?: string;
+  latitude: number;
+  longitude: number;
+  priorite?: PrioriteChantier;
+  voies_bloquees?: number;
+  statut?: StatutChantier;
+  date_debut?: string;
+  date_fin?: string;
+}
+
 export type UserRole = 'CITOYEN' | 'RESPONSABLE_MUNICIPAL' | 'PROTECTION_CIVILE';
 
 export type PlatformRole = 'RESPONSABLE_MUNICIPAL' | 'CITOYEN' | 'PROTECTION_CIVILE';

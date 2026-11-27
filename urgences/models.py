@@ -82,3 +82,44 @@ class JournalAuditIntervention(models.Model):
 
     def __str__(self):
         return f"[{self.horodatage}] Alerte #{self.alerte_id}: {self.statut_precedent} -> {self.nouveau_statut}"
+
+
+class Chantier(models.Model):
+    """
+    Chantier de voirie déclaré par le Responsable Municipal sur une rue/artère,
+    affiché sur la carte opérationnelle de la Protection Civile.
+    """
+    PRIORITE_CHOICES = [
+        ('FAIBLE', 'Faible'),
+        ('MOYENNE', 'Moyenne'),
+        ('ELEVEE', 'Élevée'),
+        ('CRITIQUE', 'Critique'),
+    ]
+    STATUT_CHOICES = [
+        ('PLANIFIE', 'Planifié'),
+        ('EN_COURS', 'En cours'),
+        ('TERMINE', 'Terminé'),
+    ]
+
+    titre = models.CharField(max_length=160)
+    rue_nom = models.CharField(max_length=200)
+    street_id = models.CharField(max_length=80, blank=True, default='')
+    description = models.TextField(blank=True, default='')
+    latitude = models.FloatField(db_index=True)
+    longitude = models.FloatField(db_index=True)
+    priorite = models.CharField(max_length=20, choices=PRIORITE_CHOICES, default='MOYENNE')
+    voies_bloquees = models.PositiveIntegerField(default=1)
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='EN_COURS', db_index=True)
+    date_debut = models.DateField(null=True, blank=True)
+    date_fin = models.DateField(null=True, blank=True)
+    declare_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='chantiers_declares')
+    date_creation = models.DateTimeField(auto_now_add=True, db_index=True)
+    date_mise_a_jour = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date_creation']
+        verbose_name = 'Chantier'
+        verbose_name_plural = 'Chantiers'
+
+    def __str__(self):
+        return f"🚧 {self.titre} — {self.rue_nom} ({self.statut})"

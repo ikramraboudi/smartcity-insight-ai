@@ -8,18 +8,20 @@ import { RiskMapModal } from '../components/RiskMapModal';
 import {
   fetchAlertes,
   fetchCasernes,
+  fetchChantiers,
   updateStatutAlerte,
   simulerAccident,
   WS_BASE_URL,
   getActiveSession,
 } from '../services/api';
 import { playEmergencyAlarm, toggleSound, isSoundEnabled } from '../services/sound';
-import type { Alerte, Caserne, RouteInfo, StatutAlerte } from '../types';
+import type { Alerte, Caserne, Chantier, RouteInfo, StatutAlerte } from '../types';
 import { Flame, X } from 'lucide-react';
 
 export const ProtectionCivilePage: React.FC = () => {
   const [alertes, setAlertes] = useState<Alerte[]>([]);
   const [casernes, setCasernes] = useState<Caserne[]>([]);
+  const [chantiers, setChantiers] = useState<Chantier[]>([]);
   const [selectedAlerte, setSelectedAlerte] = useState<Alerte | null>(null);
   const [selectedCaserne, setSelectedCaserne] = useState<Caserne | null>(null);
   const [activeRoute, setActiveRoute] = useState<RouteInfo | null>(null);
@@ -42,15 +44,17 @@ export const ProtectionCivilePage: React.FC = () => {
   // Vérification de session et permissions
   const session = getActiveSession();
 
-  // Charger les alertes et les casernes initiales
+  // Charger les alertes, casernes et chantiers initiaux
   const loadInitialData = useCallback(async () => {
     try {
-      const [alertesData, casernesData] = await Promise.all([
+      const [alertesData, casernesData, chantiersData] = await Promise.all([
         fetchAlertes(),
         fetchCasernes(),
+        fetchChantiers(),
       ]);
       setAlertes(alertesData);
       setCasernes(casernesData);
+      setChantiers(chantiersData);
 
       // Présélection de l'alerte active la plus urgente
       const activeAlert = alertesData.find(
@@ -72,12 +76,14 @@ export const ProtectionCivilePage: React.FC = () => {
   useEffect(() => {
     const refreshMapData = async () => {
       try {
-        const [alertesData, casernesData] = await Promise.all([
+        const [alertesData, casernesData, chantiersData] = await Promise.all([
           fetchAlertes(),
           fetchCasernes(),
+          fetchChantiers(),
         ]);
         setAlertes(alertesData);
         setCasernes(casernesData);
+        setChantiers(chantiersData);
         setSelectedAlerte((prev) => {
           if (!prev) return null;
           const updated = alertesData.find((a) => a.id === prev.id);
@@ -417,6 +423,7 @@ export const ProtectionCivilePage: React.FC = () => {
           <GoogleMapComponent
             casernes={casernes}
             alertes={alertes}
+            chantiers={chantiers}
             selectedAlerte={selectedAlerte}
             selectedCaserne={selectedCaserne}
             trafficLayerActive={trafficActive}

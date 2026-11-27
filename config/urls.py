@@ -14,6 +14,8 @@ from urgences.views import (
     simuler_accident,
     assistant_llm_decisionnel,
     endpoint_simulation_urgences,
+    chantiers_list_create,
+    chantier_detail,
 )
 from ml_congestion.api_views import predict_congestion_api, get_model_metrics_api
 
@@ -35,6 +37,10 @@ urlpatterns = [
     path('api/urgences/risk-map/zones/', lister_zones_risk_map, name='lister_zones_risk_map'),
     path('api/urgences/assistant/', assistant_llm_decisionnel, name='assistant_llm_decisionnel'),
     path('api/urgences/simulate/', endpoint_simulation_urgences, name='endpoint_simulation_urgences'),
+
+    # Gestion des Chantiers (Responsable Municipal -> Carte Protection Civile)
+    path('api/chantiers/', chantiers_list_create, name='chantiers_list_create'),
+    path('api/chantiers/<int:chantier_id>/', chantier_detail, name='chantier_detail'),
 
     # Module D — Prédiction de Congestion (Machine Learning)
     path('api/ml/congestion/predict/', predict_congestion_api, name='predict_congestion_ml'),

@@ -42,6 +42,7 @@ import {
   logoutMunicipal,
   simulateAnomalyBurst,
 } from '../services/api';
+import { ChantiersPanel } from './ChantiersPanel';
 import {
   AlerteAnomalieItem,
   AuthUser,
@@ -2236,6 +2237,9 @@ export const MunicipalDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Section Déclaration & Suivi des Chantiers (affichée sur la carte Protection Civile) */}
+      <ChantiersPanel />
     </div>
   );
 };

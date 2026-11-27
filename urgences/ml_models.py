@@ -90,6 +90,30 @@ def compter_accidents_secteur(lat: float, lng: float, rayon_m: float = 1200, jou
         return 0
 
 
+def compter_chantiers_secteur(lat: float, lng: float, street_id: str = "", rayon_m: float = 1500.0) -> dict:
+    """
+    Compte les chantiers actifs (EN_COURS) dans le secteur (par corridor street_id ou rayon GPS).
+    """
+    try:
+        from .models import Chantier
+        qs = Chantier.objects.filter(statut='EN_COURS')
+        matched = []
+        for ch in qs:
+            same_street = bool(street_id and ch.street_id and ch.street_id == street_id)
+            in_radius = distance_metres(lat, lng, ch.latitude, ch.longitude) <= max(rayon_m, 1500.0)
+            if same_street or in_radius:
+                matched.append(ch)
+        return {
+            "count": len(matched),
+            "voies_bloquees": sum(c.voies_bloquees for c in matched),
+            "has_critique": any(c.priorite == 'CRITIQUE' for c in matched),
+            "has_elevee": any(c.priorite == 'ELEVEE' for c in matched),
+            "titres": [c.titre for c in matched[:2]],
+        }
+    except Exception:
+        return {"count": 0, "voies_bloquees": 0, "has_critique": False, "has_elevee": False, "titres": []}
+
+
 def evaluer_secteur_region(secteur: dict, meteo_pluie: int = 0, presence_travaux: int = 0) -> dict:
     """
     Calcule le score de risque routier (0 - 100 %) pour un secteur du Cap Bon
@@ -97,6 +121,7 @@ def evaluer_secteur_region(secteur: dict, meteo_pluie: int = 0, presence_travaux
     1. Historique d'accidents réels (35 %)
     2. Criticité géométrique du tronçon (30 %)
     3. Trafic et congestion en direct (35 %)
+    + Impact réel des chantiers déclarés en base (Chantier) et météo.
     """
     lat = secteur["lat"]
     lng = secteur["lng"]
@@ -105,21 +130,40 @@ def evaluer_secteur_region(secteur: dict, meteo_pluie: int = 0, presence_travaux
 
     # 1. Historique réel des accidents
     nb_accidents = compter_accidents_secteur(lat, lng, rayon_m=rayon, jours=30)
-    # 2. Trafic connecté
+    # 2. Chantiers actifs dans le secteur
+    chantiers_info = compter_chantiers_secteur(
+        lat,
+        lng,
+        street_id=secteur.get("street_id", ""),
+        rayon_m=rayon,
+    )
+    nb_chantiers = chantiers_info["count"]
+    travaux_effectifs = 1 if (presence_travaux == 1 or nb_chantiers > 0) else 0
+
+    # 3. Trafic connecté
     trafic_idx = extraire_trafic_secteur(
         secteur["id"],
         street_id=secteur.get("street_id", ""),
         default_index=2.2,
     )
 
-    # 3. Formule composite calibrée (0 à 100%)
+    # 4. Formule composite calibrée (0 à 100%)
     score_accidents = min(35.0, (nb_accidents / 6.0) * 35.0)
     score_geometrie = criticite * 30.0
     score_trafic = ((max(1.0, min(5.0, trafic_idx)) - 1.0) / 4.0) * 35.0
 
-    # Facteurs aggravants : Pluie (+8%), Travaux (+7%)
+    # Facteurs aggravants : Pluie (+8%), Travaux manuels (+7%) ou Chantiers déclarés (+15% à +28%)
     bonus_meteo = 8.0 if meteo_pluie == 1 else 0.0
-    bonus_travaux = 7.0 if presence_travaux == 1 else 0.0
+    if nb_chantiers > 0:
+        bonus_travaux = 15.0 + min(8.0, chantiers_info["voies_bloquees"] * 3.0)
+        if chantiers_info["has_critique"]:
+            bonus_travaux += 7.0
+        elif chantiers_info["has_elevee"]:
+            bonus_travaux += 4.0
+    elif presence_travaux == 1:
+        bonus_travaux = 7.0
+    else:
+        bonus_travaux = 0.0
 
     score_total = round(min(100.0, max(5.0, score_accidents + score_geometrie + score_trafic + bonus_meteo + bonus_travaux)), 1)
 
@@ -153,7 +197,12 @@ def evaluer_secteur_region(secteur: dict, meteo_pluie: int = 0, presence_travaux
     else:
         facteurs.append(f"Trafic fluide (indice {trafic_idx:.1f}/5)")
 
-    if bonus_travaux > 0:
+    if nb_chantiers > 0:
+        titres_str = ", ".join(chantiers_info["titres"])
+        facteurs.append(
+            f"🚧 {nb_chantiers} chantier(s) actif(s) ({chantiers_info['voies_bloquees']} voie(s) bloquée(s) : {titres_str})"
+        )
+    elif bonus_travaux > 0:
         facteurs.append("Chantier ou rétrécissement de chaussée actif")
     if bonus_meteo > 0:
         facteurs.append("Chaussée glissante suite aux intempéries (Pluie)")
@@ -175,7 +224,8 @@ def evaluer_secteur_region(secteur: dict, meteo_pluie: int = 0, presence_travaux
             "indice_trafic": round(trafic_idx, 2),
             "criticite_geometrie": criticite,
             "meteo_pluie": meteo_pluie,
-            "presence_travaux": presence_travaux,
+            "presence_travaux": travaux_effectifs,
+            "chantiers_actifs": nb_chantiers,
         },
     }
 

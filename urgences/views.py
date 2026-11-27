@@ -14,7 +14,7 @@ from config.geo_config import (
     POINTS_SIMULATION_CAP_BON,
     get_public_geo_config,
 )
-from .models import SignalementAccident, AlerteAccident, JournalAudit, JournalAuditIntervention
+from .models import SignalementAccident, AlerteAccident, Chantier, JournalAudit, JournalAuditIntervention
 from .services import (
     traiter_signalement,
     diffuser_alerte_temps_reel,
@@ -297,4 +297,113 @@ def endpoint_simulation_urgences(request):
         return Response({"error": f"Mode inconnu '{mode}'. Choix: fausse_alerte, accident_confirme, risk_map"}, status=400)
 
     return Response(res)
+
+
+def _serialize_chantier(c: Chantier) -> dict:
+    return {
+        "id": c.id,
+        "titre": c.titre,
+        "rue_nom": c.rue_nom,
+        "street_id": c.street_id,
+        "description": c.description,
+        "latitude": c.latitude,
+        "longitude": c.longitude,
+        "priorite": c.priorite,
+        "voies_bloquees": c.voies_bloquees,
+        "statut": c.statut,
+        "date_debut": c.date_debut.isoformat() if hasattr(c.date_debut, "isoformat") else (str(c.date_debut) if c.date_debut else None),
+        "date_fin": c.date_fin.isoformat() if hasattr(c.date_fin, "isoformat") else (str(c.date_fin) if c.date_fin else None),
+        "declare_par": c.declare_par.username if c.declare_par else None,
+        "date_creation": c.date_creation.isoformat() if c.date_creation else None,
+    }
+
+
+@api_view(['GET', 'POST'])
+def chantiers_list_create(request):
+    """
+    GET  /api/chantiers/ : Liste les chantiers déclarés (filtrable par ?statut=EN_COURS, cache Redis 30s).
+    POST /api/chantiers/ : Déclare un nouveau chantier (Responsable Municipal).
+    """
+    if request.method == 'GET':
+        statut_filter = request.GET.get('statut')
+        if not statut_filter:
+            cached = cache.get('chantiers_all')
+            if cached is not None:
+                return Response(cached)
+
+        qs = Chantier.objects.select_related('declare_par').all()
+        if statut_filter:
+            qs = qs.filter(statut=statut_filter)
+        data = [_serialize_chantier(c) for c in qs]
+        if not statut_filter:
+            cache.set('chantiers_all', data, timeout=30)
+        return Response(data)
+
+    # POST : Création d'un chantier
+    titre = str(request.data.get('titre') or '').strip()
+    rue_nom = str(request.data.get('rue_nom') or '').strip()
+    if not titre or not rue_nom:
+        return Response(
+            {"detail": "Le titre et le nom de la rue sont obligatoires."},
+            status=400,
+        )
+
+    try:
+        lat = float(request.data.get('latitude', DEFAULT_COORDS['latitude']))
+        lng = float(request.data.get('longitude', DEFAULT_COORDS['longitude']))
+    except (TypeError, ValueError):
+        return Response({"detail": "Coordonnées GPS invalides."}, status=400)
+
+    chantier = Chantier.objects.create(
+        titre=titre,
+        rue_nom=rue_nom,
+        street_id=str(request.data.get('street_id') or '').strip(),
+        description=str(request.data.get('description') or '').strip(),
+        latitude=lat,
+        longitude=lng,
+        priorite=str(request.data.get('priorite') or 'MOYENNE').upper(),
+        voies_bloquees=max(1, int(request.data.get('voies_bloquees') or 1)),
+        statut=str(request.data.get('statut') or 'EN_COURS').upper(),
+        date_debut=request.data.get('date_debut') or None,
+        date_fin=request.data.get('date_fin') or None,
+        declare_par=request.user if request.user.is_authenticated else None,
+    )
+    cache.delete('chantiers_all')
+    return Response(_serialize_chantier(chantier), status=201)
+
+
+@api_view(['PATCH', 'PUT', 'DELETE'])
+def chantier_detail(request, chantier_id):
+    """
+    PATCH/PUT /api/chantiers/<id>/ : Met à jour le statut ou les détails d'un chantier.
+    DELETE    /api/chantiers/<id>/ : Supprime un chantier.
+    """
+    try:
+        chantier = Chantier.objects.get(pk=chantier_id)
+    except Chantier.DoesNotExist:
+        return Response({"detail": "Chantier introuvable."}, status=404)
+
+    if request.method == 'DELETE':
+        chantier.delete()
+        cache.delete('chantiers_all')
+        return Response(status=204)
+
+    for field in ('titre', 'rue_nom', 'street_id', 'description', 'priorite', 'statut'):
+        if field in request.data:
+            setattr(chantier, field, str(request.data[field]).strip())
+    if 'voies_bloquees' in request.data:
+        chantier.voies_bloquees = max(1, int(request.data['voies_bloquees']))
+    if 'latitude' in request.data:
+        chantier.latitude = float(request.data['latitude'])
+    if 'longitude' in request.data:
+        chantier.longitude = float(request.data['longitude'])
+    if 'date_debut' in request.data:
+        chantier.date_debut = request.data['date_debut'] or None
+    if 'date_fin' in request.data:
+        chantier.date_fin = request.data['date_fin'] or None
+
+    chantier.save()
+    cache.delete('chantiers_all')
+    return Response(_serialize_chantier(chantier))
+
 
